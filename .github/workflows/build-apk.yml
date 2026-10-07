@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -38,6 +38,17 @@ jobs:
 
       - name: Controllo TypeScript (informativo)
         run: npx tsc --noEmit || echo "::warning::TypeScript ha segnalato errori"
+
+      - name: Prova bundle JavaScript
+        run: |
+          set -o pipefail
+          npx expo export --platform android --output-dir /tmp/bundle-check 2>&1 | tee bundle.log
+
+      - name: Riassunto errori bundle (se fallisce)
+        if: failure()
+        run: |
+          body=$(grep -n -A25 -iE "error|unable to resolve|SyntaxError" bundle.log | head -40 | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Bundle::$body"
 
       - name: Genera progetto Android
         run: npx expo prebuild --platform android --no-install --clean
