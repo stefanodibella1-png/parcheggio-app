@@ -21,11 +21,11 @@ export function distanceM(a: LatLon, b: LatLon): number {
 
 /** Direzione iniziale da a verso b, gradi 0–360 (0 = nord). */
 export function bearingDeg(a: LatLon, b: LatLon): number {
-  const φ1 = a.latitude * RAD;
-  const φ2 = b.latitude * RAD;
-  const Δλ = (b.longitude - a.longitude) * RAD;
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const phi1 = a.latitude * RAD;
+  const phi2 = b.latitude * RAD;
+  const dLambda = (b.longitude - a.longitude) * RAD;
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
   return (Math.atan2(y, x) / RAD + 360) % 360;
 }
 
