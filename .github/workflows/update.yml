@@ -42,6 +42,9 @@ jobs:
       - name: Test del motore
         run: npm run test:engine
 
+      - name: Genera progetto Android (come nella build APK, serve allo stesso runtime)
+        run: npx expo prebuild --platform android --no-install --clean
+
       - name: Runtime identico all'APK installata
         run: |
           RV=$(npx expo-updates runtimeversion:resolve --platform android 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).runtimeVersion||'')}catch{console.log('')}})")

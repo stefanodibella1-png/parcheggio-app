@@ -234,3 +234,14 @@ test('19. coda o guida lenta in linea retta → nessuna ricerca di parcheggio', 
     assert.ok(!has(r.events, 'PARKING_SEARCH'), r.log);
   }
 });
+
+test('20. fermo in casa lontano dall\'auto, poi cammina all\'auto (con un picco GPS) e riparte → RELEASE (test reale 07/10 sera)', () => {
+  const s = new Scenario().drive(300).stopInCar(150).walk(60, 0).stand(600, { accuracy: 12, noiseM: 4 });
+  // camminata di ritorno con un picco di velocità dovuto al GPS
+  s.walk(10, 180, 4.5).walk(2, 180, 9).walk(40, 180, 4.5).drive(120, 35, 90);
+  const r = run(s);
+  const rel = releases(r.events);
+  assert.equal(rel.length, 1, r.log);
+  assert.equal(rel[0].type, 'PARKING_RELEASED', r.log);
+  assert.ok(rel[0].data.checks?.some((c) => c.startsWith('✓ partenza a')), r.log);
+});

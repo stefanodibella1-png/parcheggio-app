@@ -364,8 +364,9 @@ export class DetectionEngine {
         m.motionStartFix = null;
       } else if (kmh > 5 && m.motionStartFix === null) {
         const still = m.stillPhase ?? m.lastStillPhase;
-        m.motionStartFix =
-          still && still.fixes.length > 0 ? still.fixes[still.fixes.length - 1] : s;
+        const lastStill = still && still.fixes.length > 0 ? still.fixes[still.fixes.length - 1] : null;
+        // la fase ferma vale solo se è appena finita e qui vicino
+        m.motionStartFix = lastStill && s.t - lastStill.t <= 30_000 && distanceM(lastStill, s) <= 40 ? lastStill : s;
       }
     }
 
@@ -967,10 +968,26 @@ export class DetectionEngine {
     const spot = m.session?.spot.pointFinal ?? null;
     const f = this.lastValidFix(now);
     const d = spot && f ? distanceM(spot, f) : 0;
+    // Distanza dal punto all'inizio della partenza: la minima nei 2 minuti prima.
+    // (Test del 07/10 sera: il "punto di inizio movimento" era rimasto quello di casa,
+    // a 70-86 m, e due partenze vere erano finite LOW_CONFIDENCE.)
+    let startDist: number | null = spot && startFix ? distanceM(spot, startFix) : null;
+    let nearest: LocationSample | null = null;
+    if (spot) {
+      for (const fx of m.fixes) {
+        if (now - fx.t > 120_000) continue;
+        const dd = distanceM(spot, fx);
+        if (startDist === null || dd < startDist) {
+          startDist = dd;
+          nearest = fx;
+        }
+      }
+    }
+    const begin = nearest && (!startFix || nearest.t > startFix.t) ? nearest : startFix;
     m.departure = {
-      startT: startFix ? startFix.t : now,
-      startFix,
-      startDistM: spot && startFix ? distanceM(spot, startFix) : null,
+      startT: begin ? begin.t : now,
+      startFix: begin,
+      startDistM: startDist,
       maxDistM: d,
       lastDistM: d,
       maxKmh: this.currentKmh(now) ?? 0,
