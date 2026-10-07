@@ -1,4 +1,4 @@
-// Aggiornamenti automatici (EAS Update).
+// Aggiornamenti automatici (EAS Update), pubblicati da GitHub Actions a ogni modifica JS.
 // Regola: MAI riavviare l'app durante un test attivo.
 import * as Updates from 'expo-updates';
 
