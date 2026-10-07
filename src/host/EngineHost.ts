@@ -457,7 +457,29 @@ class Host {
 
   // ---- persistenza -----------------------------------------------------------------------
 
+  private flushing: Promise<void> | null = null;
+  private flushAgain = false;
+
+  /** Salva su disco. Mai due salvataggi insieme: se uno è in corso, si accoda. */
   async flush(force: boolean): Promise<void> {
+    if (this.flushing) {
+      this.flushAgain = true;
+      if (force) await this.flushing;
+      return;
+    }
+    this.flushing = this.doFlush(force);
+    try {
+      await this.flushing;
+    } finally {
+      this.flushing = null;
+    }
+    if (this.flushAgain) {
+      this.flushAgain = false;
+      await this.flush(force);
+    }
+  }
+
+  private async doFlush(force: boolean): Promise<void> {
     const testId = this.state.testId;
     if (!testId || !this.engine) return;
     const inputs = this.pendingInputs;
@@ -480,6 +502,10 @@ class Host {
         await db.kvSet(`engine:${testId}`, this.engine.serialize());
       }
       this.lastPersistT = now;
+      if (this.state.error?.startsWith('Salvataggio')) {
+        this.state.error = null;
+        this.emitChange();
+      }
     } catch (e) {
       // non perdere i dati: rimetti in coda
       this.pendingInputs = [...inputs, ...this.pendingInputs];

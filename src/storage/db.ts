@@ -37,6 +37,25 @@ export interface TestRow {
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+// Tutte le scritture passano da una coda: una sola alla volta.
+// Senza coda, due salvataggi contemporanei (timer, eventi, task in background)
+// aprivano transazioni sovrapposte ("cannot rollback - no transaction is active").
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.catch(() => undefined);
+  return run;
+}
+
+function tx(db: SQLite.SQLiteDatabase, fn: () => Promise<void>): Promise<void> {
+  return serialized(() => db.withTransactionAsync(fn));
+}
+
+function write(db: SQLite.SQLiteDatabase, sql: string, params: SQLite.SQLiteBindParams): Promise<unknown> {
+  return serialized(() => db.runAsync(sql, params));
+}
+
 export function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = (async () => {
@@ -112,7 +131,8 @@ function rowToTest(r: Record<string, unknown>): TestRow {
 
 export async function insertTest(t: TestRow): Promise<void> {
   const db = await getDb();
-  await db.runAsync(
+  await write(
+    db,
     'INSERT INTO tests (id, startedAt, stoppedAt, platform, meta, config, quality, finalState) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [t.id, t.startedAt, t.stoppedAt, t.platform, JSON.stringify(t.meta), JSON.stringify(t.config), JSON.stringify(t.quality), t.finalState],
   );
@@ -123,7 +143,7 @@ export async function updateTest(id: string, patch: Partial<Pick<TestRow, 'stopp
   const cur = await getTest(id);
   if (!cur) return;
   const next = { ...cur, ...patch };
-  await db.runAsync('UPDATE tests SET stoppedAt = ?, meta = ?, quality = ?, finalState = ? WHERE id = ?', [
+  await write(db, 'UPDATE tests SET stoppedAt = ?, meta = ?, quality = ?, finalState = ? WHERE id = ?', [
     next.stoppedAt,
     JSON.stringify(next.meta),
     JSON.stringify(next.quality),
@@ -152,7 +172,7 @@ export async function getActiveTest(): Promise<TestRow | null> {
 
 export async function deleteTest(id: string): Promise<void> {
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
+  await tx(db, async () => {
     for (const table of ['inputs', 'events', 'snapshots', 'sessions', 'labels']) {
       await db.runAsync(`DELETE FROM ${table} WHERE testId = ?`, [id]);
     }
@@ -166,9 +186,12 @@ export async function deleteTest(id: string): Promise<void> {
 export async function appendInputs(testId: string, inputs: { t: number; input: EngineInput }[]): Promise<void> {
   if (inputs.length === 0) return;
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
-    for (const x of inputs) {
-      await db.runAsync('INSERT INTO inputs (testId, t, json) VALUES (?, ?, ?)', [testId, Math.round(x.t), JSON.stringify(x.input)]);
+  await tx(db, async () => {
+    for (let i = 0; i < inputs.length; i += 100) {
+      const chunk = inputs.slice(i, i + 100);
+      const params: (string | number)[] = [];
+      for (const x of chunk) params.push(testId, Math.round(x.t), JSON.stringify(x.input));
+      await db.runAsync(`INSERT INTO inputs (testId, t, json) VALUES ${chunk.map(() => '(?, ?, ?)').join(', ')}`, params);
     }
   });
 }
@@ -197,7 +220,7 @@ export async function countInputs(testId: string): Promise<number> {
 export async function appendEvents(testId: string, events: DetectionEvent[]): Promise<void> {
   if (events.length === 0) return;
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
+  await tx(db, async () => {
     for (const e of events) {
       await db.runAsync('INSERT OR REPLACE INTO events (id, testId, t, json) VALUES (?, ?, ?, ?)', [e.id, testId, e.t, JSON.stringify(e)]);
     }
@@ -227,7 +250,7 @@ export async function getEventsByTest(): Promise<Map<string, DetectionEvent[]>> 
 export async function appendSnapshots(testId: string, snaps: EngineSnapshot[]): Promise<void> {
   if (snaps.length === 0) return;
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
+  await tx(db, async () => {
     for (const s of snaps) await db.runAsync('INSERT INTO snapshots (testId, t, json) VALUES (?, ?, ?)', [testId, s.t, JSON.stringify(s)]);
   });
 }
@@ -241,7 +264,7 @@ export async function getSnapshots(testId: string): Promise<EngineSnapshot[]> {
 export async function upsertSessions(testId: string, sessions: ParkingSession[], now: number): Promise<void> {
   if (sessions.length === 0) return;
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
+  await tx(db, async () => {
     for (const s of sessions) {
       await db.runAsync('INSERT OR REPLACE INTO sessions (parkingId, testId, updatedAt, json) VALUES (?, ?, ?, ?)', [s.parkingId, testId, now, JSON.stringify(s)]);
     }
@@ -258,12 +281,12 @@ export async function getSessions(testId?: string): Promise<(ParkingSession & { 
 
 export async function upsertLabel(label: ReviewLabel): Promise<void> {
   const db = await getDb();
-  await db.runAsync('INSERT OR REPLACE INTO labels (id, testId, json) VALUES (?, ?, ?)', [label.id, label.testId, JSON.stringify(label)]);
+  await write(db, 'INSERT OR REPLACE INTO labels (id, testId, json) VALUES (?, ?, ?)', [label.id, label.testId, JSON.stringify(label)]);
 }
 
 export async function deleteLabel(id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync('DELETE FROM labels WHERE id = ?', [id]);
+  await write(db, 'DELETE FROM labels WHERE id = ?', [id]);
 }
 
 export async function getLabels(testId?: string): Promise<ReviewLabel[]> {
@@ -284,5 +307,5 @@ export async function kvGet(key: string): Promise<string | null> {
 
 export async function kvSet(key: string, value: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [key, value]);
+  await write(db, 'INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [key, value]);
 }
