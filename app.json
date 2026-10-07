@@ -14,7 +14,10 @@
     "updates": {
       "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/08c3d0c7-bd32-4382-9152-2692c6ed6864"
+      "url": "https://u.expo.dev/08c3d0c7-bd32-4382-9152-2692c6ed6864",
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.stefanodibella.parcheggio",

@@ -1,0 +1,59 @@
+name: Build APK Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Dipendenze
+        run: |
+          npm install --no-audit --no-fund
+          npx expo install --fix
+
+      - name: Test del motore
+        run: npm run test:engine
+
+      - name: Controllo TypeScript (informativo)
+        run: npx tsc --noEmit || echo "::warning::TypeScript ha segnalato errori"
+
+      - name: Genera progetto Android
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Compila APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Rinomina APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
+
+      - name: Pubblica la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: PARCHEGGIO build ${{ github.run_number }}
+          body: APK Android compilata da GitHub Actions dal commit ${{ github.sha }}.
+          files: PARCHEGGIO-build-${{ github.run_number }}.apk
+          make_latest: true
