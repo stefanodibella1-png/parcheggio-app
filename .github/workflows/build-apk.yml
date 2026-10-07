@@ -89,6 +89,17 @@ jobs:
           body=$(sed -n '/What went wrong/,/Try:/p' gradle.log | head -30 | sed ':a;N;$!ba;s/\n/%0A/g')
           [ -n "$body" ] && echo "::error title=Gradle::$body" || true
 
+      - name: Registra il runtime dell'APK (per gli aggiornamenti automatici)
+        run: |
+          RV=$(unzip -p android/app/build/outputs/apk/release/app-release.apk assets/app.manifest | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).runtimeVersion))")
+          echo "::notice::runtimeVersion APK $RV"
+          echo "$RV" > runtime-android.txt
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add runtime-android.txt
+          git commit -m "Runtime APK $RV [skip ci]" || true
+          git push || true
+
       - name: Rinomina APK
         run: cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
 

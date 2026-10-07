@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/update.yml'
+      - 'runtime-android.txt'
       - 'engine/**'
       - 'src/**'
       - 'App.tsx'
@@ -42,13 +43,10 @@ jobs:
       - name: Test del motore
         run: npm run test:engine
 
-      - name: Genera progetto Android (come nella build APK, serve allo stesso runtime)
-        run: npx expo prebuild --platform android --no-install --clean
-
       - name: Runtime identico all'APK installata
         run: |
-          RV=$(npx expo-updates runtimeversion:resolve --platform android 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).runtimeVersion||'')}catch{console.log('')}})")
-          if [ -z "$RV" ]; then RV=$(npx expo-updates fingerprint:generate --platform android | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))"); fi
+          # runtime-android.txt viene scritto dalla build APK leggendo l'APK stessa
+          RV=$(tr -d '[:space:]' < runtime-android.txt)
           echo "::notice::runtimeVersion $RV"
           node -e "const f='app.json';const j=require('./'+f);j.expo.runtimeVersion=process.argv[1];j.expo.owner='stefanodibella1s-organization';require('fs').writeFileSync(f,JSON.stringify(j,null,2))" "$RV"
 
