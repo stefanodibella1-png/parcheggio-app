@@ -53,6 +53,14 @@ jobs:
       - name: Genera progetto Android
         run: npx expo prebuild --platform android --no-install --clean
 
+      - name: Verifica modulo nativo
+        run: |
+          if grep -rq "activity-recognition\|activityrecognition" android/settings.gradle android/app/build/generated 2>/dev/null || npx expo-modules-autolinking resolve --platform android 2>/dev/null | grep -qi "activity-recognition\|activityrecognition"; then
+            echo "::notice::Modulo activity-recognition incluso"
+          else
+            echo "::error::Modulo activity-recognition NON trovato dall'autolinking"; exit 1
+          fi
+
       - name: Compila APK
         working-directory: android
         run: |

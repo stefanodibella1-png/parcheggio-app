@@ -1,4 +1,5 @@
 // Checklist di prontezza e richiesta dei permessi.
+import * as Battery from 'expo-battery';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
@@ -35,7 +36,7 @@ async function requestMotion(): Promise<void> {
 }
 
 async function motionStatus(): Promise<{ level: Level; detail: string }> {
-  if (!ActivityRecognition.present) return { level: 'bad', detail: 'Modulo nativo assente (stai usando Expo Go?)' };
+  if (!ActivityRecognition.present) return { level: 'bad', detail: 'Modulo non incluso in questa installazione: serve una nuova build' };
   if (!(await ActivityRecognition.isAvailable())) return { level: 'bad', detail: 'Non disponibile su questo telefono' };
   if (Platform.OS === 'android') {
     if (Number(Platform.Version) < 29) return { level: 'ok', detail: 'Concesso' };
@@ -148,16 +149,30 @@ export async function readiness(): Promise<CheckItem[]> {
   });
 
   if (Platform.OS === 'android') {
+    let optimized: boolean | null = null;
+    try {
+      optimized = await Battery.isBatteryOptimizationEnabledAsync();
+    } catch {
+      optimized = null;
+    }
     items.push({
       key: 'battery',
       label: 'Ottimizzazione batteria',
-      level: 'warn',
-      detail: 'Da verificare a mano: imposta PARCHEGGIO su "Senza restrizioni"',
+      level: optimized === false ? 'ok' : 'warn',
+      detail:
+        optimized === false
+          ? 'Senza restrizioni'
+          : optimized === true
+            ? 'Attiva: imposta PARCHEGGIO su "Senza restrizioni"'
+            : 'Da verificare a mano: imposta PARCHEGGIO su "Senza restrizioni"',
       impact: 'Alcuni telefoni (Xiaomi, Samsung, Huawei…) chiudono l\'app in background.',
-      action: async () => {
-        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-      },
-      actionLabel: 'Apri impostazioni batteria',
+      action:
+        optimized === false
+          ? null
+          : async () => {
+              await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            },
+      actionLabel: optimized === false ? null : 'Apri impostazioni batteria',
     });
   }
   return items;
