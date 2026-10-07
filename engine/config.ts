@@ -85,6 +85,20 @@ export interface DetectionConfig {
   RETURN_CANCEL_S: number;
   RETURN_GEOFENCE_RADII: number[];
 
+  // --- ricerca del parcheggio (sperimentale) ---
+  /** finestra di guida analizzata (s) */
+  SEARCH_WINDOW_S: number;
+  /** velocità media tipica di chi cerca posto (km/h) */
+  SEARCH_MIN_SPEED: number;
+  SEARCH_MAX_SPEED: number;
+  /** percorso minimo nella finestra (m) */
+  SEARCH_MIN_PATH_M: number;
+  /** distanza per considerare "ripassato" dallo stesso punto (m) */
+  SEARCH_REVISIT_M: number;
+  SEARCH_MIN_CONFIDENCE: number;
+  /** sopra questa velocità media nell'ultimo minuto la ricerca è finita (km/h) */
+  SEARCH_EXIT_SPEED: number;
+
   // --- pesi degli score ---
   W_VEHICLE: { speed: number; activity: number; motion: number };
   W_WALKING: { speed: number; activity: number; steps: number };
@@ -165,6 +179,14 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_MIN_CONFIDENCE: 70,
   RETURN_CANCEL_S: 60,
   RETURN_GEOFENCE_RADII: [500, 200, 50],
+
+  SEARCH_WINDOW_S: 180,
+  SEARCH_MIN_SPEED: 5,
+  SEARCH_MAX_SPEED: 25,
+  SEARCH_MIN_PATH_M: 300,
+  SEARCH_REVISIT_M: 25,
+  SEARCH_MIN_CONFIDENCE: 70,
+  SEARCH_EXIT_SPEED: 40,
 
   W_VEHICLE: { speed: 0.5, activity: 0.35, motion: 0.15 },
   W_WALKING: { speed: 0.3, activity: 0.45, steps: 0.25 },

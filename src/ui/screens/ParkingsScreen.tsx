@@ -121,6 +121,7 @@ export function ParkingDetailScreen({ parkingId, nav }: { parkingId: string; nav
         <Row k="Fonte indirizzo" v={sp.addressSource ?? '–'} />
         <Row k="Distanza indirizzo–punto" v={sp.addressDistanceM === null ? '–' : `${sp.addressDistanceM} m`} />
         <Row k="Confidence rilascio" v={s.releaseConfidence === null ? '–' : String(Math.round(s.releaseConfidence))} />
+ <Row k="Ricerca del posto prima della sosta" v={s.searchDurationS ? `${fmtDuration(s.searchDurationS * 1000)} · ${s.searchDistanceM ?? '–'} m` : 'non rilevata'} />
         <Row k="Partenza reale (dalla traccia)" v={s.realDepartureT ? fmtTime(s.realDepartureT) : '–'} />
       </Card>
       <SectionTitle>Eventi</SectionTitle>

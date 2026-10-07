@@ -110,12 +110,17 @@ interface Memory {
 
   returnSeries: { t: number; d: number }[];
 
+  drivePath?: { t: number; latitude: number; longitude: number }[];
+  search?: { startT: number; distanceM: number; lastT: number; endedT: number | null } | null;
+
   scores: Scores;
   lastSnapshotT: number;
   pendingSnapshots: EngineSnapshot[];
 }
 
-const ZERO: Scores = { vehicle: 0, walking: 0, parking: 0, departure: 0, release: 0, return: 0 };
+const ZERO: Scores = { vehicle: 0, walking: 0, parking: 0, departure: 0, release: 0, return: 0, search: 0 };
+
+const DRIVING: EngineState[] = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING'];
 
 const PARKED_FAMILY: EngineState[] = [
   'PARKED',
@@ -192,6 +197,8 @@ export class DetectionEngine {
       awayVehicleLogged: false,
       farSince: null,
       returnSeries: [],
+      drivePath: [],
+      search: null,
       scores: { ...ZERO },
       lastSnapshotT: 0,
       pendingSnapshots: [],
@@ -304,6 +311,7 @@ export class DetectionEngine {
       lastReason: m.lastReason,
       parkingId: m.session ? m.session.parkingId : null,
       returnInfo: this.returnInfo(now),
+      searchingSinceT: m.search && m.search.endedT === null ? m.search.startT : null,
     };
   }
 
@@ -334,6 +342,17 @@ export class DetectionEngine {
     if (!valid) return; // scartato: registrato nell'export ma non usato
 
     m.fixes.push(s);
+    if (DRIVING.includes(m.state)) {
+      if (!m.drivePath) m.drivePath = [];
+      const prev = m.drivePath[m.drivePath.length - 1];
+      if (m.search && m.search.endedT === null && prev && s.t - prev.t <= 10_000) {
+        m.search.distanceM += distanceM(prev, s);
+        m.search.lastT = s.t;
+      }
+      m.drivePath.push({ t: s.t, latitude: s.latitude, longitude: s.longitude });
+    } else if (m.drivePath && m.drivePath.length) {
+      m.drivePath = [];
+    }
     if (kmh !== null) m.speeds.push({ t: s.t, kmh });
     if (s.heading !== null && s.heading !== undefined && kmh !== null && kmh >= 5) {
       m.headings.push({ t: s.t, h: s.heading });
@@ -427,6 +446,7 @@ export class DetectionEngine {
     cut(m.headings, 30_000);
     cut(m.steps, 20_000);
     cut(m.returnSeries, 600_000);
+    if (m.drivePath) cut(m.drivePath, this.cfg.SEARCH_WINDOW_S * 1000);
   }
 
   // ----- segnali --------------------------------------------------------------
@@ -622,6 +642,7 @@ export class DetectionEngine {
     m.scores.parking = this.parkingScore(now);
     m.scores.departure = m.state === 'DEPARTURE_CANDIDATE' || m.state === 'VEHICLE_DEPARTED' ? vScore : 0;
     m.scores.return = m.state === 'PARKED_USER_AWAY' || m.state === 'RETURN_PREDICTED' ? this.returnScore(now) : 0;
+    this.evalSearch(now);
     if (m.state !== 'VEHICLE_DEPARTED') m.scores.release = 0;
   }
 
@@ -787,6 +808,14 @@ export class DetectionEngine {
       releaseConfidence: null,
       realDepartureT: null,
     };
+    const sr = m.search;
+    if (sr && (sr.endedT === null || now - sr.endedT <= 120_000)) {
+      session.searchStartT = sr.startT;
+      session.searchDurationS = Math.max(0, Math.round((session.startT - sr.startT) / 1000));
+      session.searchDistanceM = Math.round(sr.distanceM);
+    }
+    m.search = null;
+    m.drivePath = [];
     m.session = session;
     m.sessions.push(session);
     m.stopPhase = null;
@@ -1144,6 +1173,85 @@ export class DetectionEngine {
       geocodeStatus: 'PENDING',
       recurringSpot: false,
     };
+  }
+
+  // ----- ricerca del parcheggio (sperimentale) -----------------------------------------
+
+  /**
+   * Riconosce il "giro in cerca di posto": velocità bassa, percorso tortuoso
+   * (molta strada, poco spostamento netto) e ripassaggi dagli stessi punti.
+   * Solo informativo: non cambia lo stato e non genera rilasci.
+   */
+  private evalSearch(now: number): void {
+    const cfg = this.cfg;
+    const m = this.m;
+    if (!DRIVING.includes(m.state)) {
+      m.scores.search = 0;
+      if (m.search && m.search.endedT === null) m.search.endedT = now;
+      return;
+    }
+    const path = m.drivePath ?? [];
+    const score = this.searchScore(path, now);
+    m.scores.search = score;
+    const sr = m.search;
+    if ((!sr || sr.endedT !== null) && score >= cfg.SEARCH_MIN_CONFIDENCE) {
+      const start = path[0];
+      let len = 0;
+      for (let i = 1; i < path.length; i++) if (path[i].t - path[i - 1].t <= 10_000) len += distanceM(path[i - 1], path[i]);
+      m.search = { startT: start ? start.t : now, distanceM: len, lastT: now, endedT: null };
+      const net = start ? Math.round(distanceM(start, path[path.length - 1])) : 0;
+      this.emit(
+        'PARKING_SEARCH',
+        m.state,
+        m.state,
+        `probabile ricerca di parcheggio: ${Math.round(len)} m percorsi negli ultimi ${Math.round((now - (start ? start.t : now)) / 1000)} s con spostamento netto di ${net} m (score ${score})`,
+        now,
+      );
+      return;
+    }
+    if (sr && sr.endedT === null) {
+      // uscita dalla ricerca: si torna a guidare veloce
+      const last60 = path.filter((x) => now - x.t <= 60_000);
+      if (last60.length >= 2) {
+        let l = 0;
+        for (let i = 1; i < last60.length; i++) l += distanceM(last60[i - 1], last60[i]);
+        const dt = (last60[last60.length - 1].t - last60[0].t) / 1000;
+        if (dt > 30 && (l / dt) * 3.6 > cfg.SEARCH_EXIT_SPEED) sr.endedT = now;
+      }
+    }
+  }
+
+  private searchScore(path: { t: number; latitude: number; longitude: number }[], now: number): number {
+    const cfg = this.cfg;
+    if (path.length < 10) return 0;
+    const dt = (path[path.length - 1].t - path[0].t) / 1000;
+    if (dt < cfg.SEARCH_WINDOW_S * 0.66) return 0;
+    let len = 0;
+    for (let i = 1; i < path.length; i++) if (path[i].t - path[i - 1].t <= 10_000) len += distanceM(path[i - 1], path[i]);
+    if (len < cfg.SEARCH_MIN_PATH_M) return 0;
+    const avgKmh = (len / dt) * 3.6;
+    let speedComp = 0;
+    if (avgKmh >= cfg.SEARCH_MIN_SPEED && avgKmh <= cfg.SEARCH_MAX_SPEED) speedComp = 1;
+    else if (avgKmh > cfg.SEARCH_MAX_SPEED && avgKmh <= cfg.SEARCH_MAX_SPEED + 10) speedComp = 0.5;
+    const net = distanceM(path[0], path[path.length - 1]);
+    const tortuosity = len / Math.max(net, 30);
+    const tortComp = clamp01((tortuosity - 1.5) / 1.5);
+    // ripassaggi: punti vicini a un punto di almeno 60 s prima
+    let revisits = 0;
+    let checked = 0;
+    for (let i = 0; i < path.length; i += 3) {
+      checked++;
+      for (let j = 0; j < i; j += 2) {
+        if (path[i].t - path[j].t < 60_000) break;
+        if (distanceM(path[i], path[j]) <= cfg.SEARCH_REVISIT_M) {
+          revisits++;
+          break;
+        }
+      }
+    }
+    const revisitComp = clamp01(revisits / Math.max(1, checked) / 0.25);
+    void now;
+    return r1(100 * (0.3 * speedComp + 0.4 * tortComp + 0.3 * revisitComp));
   }
 
   // ----- score informativi ------------------------------------------------------

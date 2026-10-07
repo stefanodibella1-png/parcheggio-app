@@ -72,7 +72,8 @@ export type EngineState =
   | 'LOW_CONFIDENCE'
   | 'ERROR';
 
-export type EventType = EngineState | 'PARKING_RELEASED_INFERRED';
+/** PARKING_SEARCH è informativo: non cambia lo stato (sperimentale). */
+export type EventType = EngineState | 'PARKING_RELEASED_INFERRED' | 'PARKING_SEARCH';
 
 export interface Scores {
   vehicle: number;
@@ -81,6 +82,8 @@ export interface Scores {
   departure: number;
   release: number;
   return: number;
+  /** probabile ricerca di parcheggio (sperimentale) */
+  search: number;
 }
 
 export interface EventData {
@@ -174,6 +177,10 @@ export interface ParkingSession {
   releaseConfidence: number | null;
   /** ricavato a posteriori dalla traccia (sezione 11) */
   realDepartureT: number | null;
+  /** ricerca del posto prima della sosta (sperimentale) */
+  searchStartT?: number | null;
+  searchDurationS?: number | null;
+  searchDistanceM?: number | null;
 }
 
 export interface ReturnInfo {
@@ -198,6 +205,8 @@ export interface EngineSnapshot {
   lastReason: string | null;
   parkingId: string | null;
   returnInfo: ReturnInfo | null;
+  /** inizio della probabile ricerca di parcheggio in corso */
+  searchingSinceT: number | null;
 }
 
 export type ReviewVerdict = 'CORRECT' | 'FALSE_POSITIVE' | 'MISSED';

@@ -148,6 +148,8 @@ function MetricsCard({ m, compact }: { m: Metrics; compact?: boolean }) {
       {!compact ? <Row k="Indirizzi risolti" v={m.addressResolvedPct === null ? '–' : `${m.addressResolvedPct}%`} /> : null}
       <Row k="Previsioni di ritorno (seguite da partenza)" v={`${m.returnPredictions} (${m.returnPredictionsFollowed})`} />
       <Row k="Anticipo medio della previsione" v={m.avgReturnLeadS === null ? '–' : fmtDuration(m.avgReturnLeadS * 1000)} />
+      <Row k="Ricerche di parcheggio riconosciute" v={String(m.searchesDetected)} />
+      <Row k="Tempo medio per trovare posto" v={m.avgSearchTimeS === null ? '–' : fmtDuration(m.avgSearchTimeS * 1000)} />
     </Card>
   );
 }

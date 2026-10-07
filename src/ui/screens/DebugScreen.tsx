@@ -66,6 +66,7 @@ function Live() {
         <ScoreBar label="Departure" value={snap.scores.departure} color={FAMILY_COLORS.vehicle} />
         <ScoreBar label="Release" value={snap.scores.release} color={FAMILY_COLORS.released} />
         <ScoreBar label="Return (sperimentale)" value={snap.scores.return} color={FAMILY_COLORS.walking} />
+        <ScoreBar label="Ricerca posto (sperimentale)" value={snap.scores.search ?? 0} color={FAMILY_COLORS.parking} />
       </Card>
       <SectionTitle>Ultima decisione</SectionTitle>
       <Card>

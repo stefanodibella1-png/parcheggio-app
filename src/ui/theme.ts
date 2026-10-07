@@ -19,6 +19,7 @@ export function familyOf(s: EngineState | EventType): Family {
     case 'VEHICLE_MOVING':
     case 'VEHICLE_DEPARTED':
     case 'DEPARTURE_CANDIDATE':
+    case 'PARKING_SEARCH':
       return 'vehicle';
     case 'VEHICLE_STOPPED':
     case 'POSSIBLE_PARKING':
@@ -39,7 +40,7 @@ export function familyOf(s: EngineState | EventType): Family {
   }
 }
 
-export const STATE_TEXT: Record<EngineState | 'PARKING_RELEASED_INFERRED', { icon: string; label: string }> = {
+export const STATE_TEXT: Record<EventType, { icon: string; label: string }> = {
   UNKNOWN: { icon: '◌', label: 'In attesa di movimento' },
   WALKING: { icon: '🚶', label: 'A piedi' },
   IN_VEHICLE: { icon: '🚗', label: 'In auto' },
@@ -54,6 +55,7 @@ export const STATE_TEXT: Record<EngineState | 'PARKING_RELEASED_INFERRED', { ico
   VEHICLE_DEPARTED: { icon: '🚗', label: 'Ripartenza in auto' },
   PARKING_RELEASED: { icon: '✅', label: 'Posto probabilmente liberato' },
   PARKING_RELEASED_INFERRED: { icon: '✅', label: 'Posto probabilmente liberato (dedotto)' },
+  PARKING_SEARCH: { icon: '🔎', label: 'Probabile ricerca di parcheggio' },
   LOW_CONFIDENCE: { icon: '❔', label: 'Rilevamento incerto' },
   ERROR: { icon: '⚠️', label: 'Errore' },
 };

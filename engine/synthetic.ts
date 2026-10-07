@@ -130,6 +130,14 @@ export class Scenario {
     return this;
   }
 
+  /** giri attorno agli isolati in cerca di posto: lati da `sideS` secondi */
+  circleBlocks(laps: number, sideS = 30, kmh = 15): this {
+    for (let i = 0; i < laps; i++) {
+      for (const b of [0, 90, 180, 270]) this.drive(sideS, kmh, b);
+    }
+    return this;
+  }
+
   get position(): { latitude: number; longitude: number } {
     return { latitude: this.lat, longitude: this.lon };
   }

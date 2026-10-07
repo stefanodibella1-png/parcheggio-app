@@ -169,6 +169,9 @@ export interface Metrics {
   returnPredictionsFollowed: number;
   reviewed: number;
   toReview: number;
+  /** ricerca del parcheggio (sperimentale) */
+  searchesDetected: number;
+  avgSearchTimeS: number | null;
 }
 
 function avg(xs: number[]): number | null {
@@ -199,6 +202,8 @@ export function computeMetrics(tests: TestRecord[], cfg: DetectionConfig = DEFAU
   const leads: number[] = [];
   let addrOk = 0;
   let sessionsN = 0;
+  let searches = 0;
+  const searchTimes: number[] = [];
 
   for (const t of tests) {
     parkings += t.events.filter((e) => e.type === 'PARKED').length + t.sessions.filter((s) => s.inferred).length;
@@ -223,7 +228,9 @@ export function computeMetrics(tests: TestRecord[], cfg: DetectionConfig = DEFAU
       }
     }
     fn += t.labels.filter((l) => l.verdict === 'MISSED' && l.kind === 'RELEASE').length;
+    searches += t.events.filter((e) => e.type === 'PARKING_SEARCH').length;
     for (const s of t.sessions) {
+      if (s.searchDurationS !== null && s.searchDurationS !== undefined) searchTimes.push(s.searchDurationS);
       sessionsN++;
       pointAcc.push(s.spot.pointFinal.accuracyM);
       if (s.spot.geocodeStatus === 'OK') addrOk++;
@@ -265,6 +272,8 @@ export function computeMetrics(tests: TestRecord[], cfg: DetectionConfig = DEFAU
     returnPredictionsFollowed: predictionsFollowed,
     reviewed,
     toReview,
+    searchesDetected: searches,
+    avgSearchTimeS: avg(searchTimes),
   };
 }
 

@@ -71,6 +71,9 @@ export function StateCard({ snap, now }: { snap: EngineSnapshot | null; now: num
           {bigUnit && !bigUnit.endsWith('da') ? <Text style={{ color: c.textDim, fontSize: 18, marginLeft: 8 }}>{bigUnit}</Text> : null}
         </View>
       ) : null}
+      {snap?.searchingSinceT ? (
+        <Label dim style={{ marginTop: 4 }}>🔎 Probabile ricerca di parcheggio da {fmtDuration(now - snap.searchingSinceT)} (sperimentale)</Label>
+      ) : null}
       {snap?.returnInfo && state === 'RETURN_PREDICTED' && snap.returnInfo.etaS !== null ? (
         <Label dim style={{ marginTop: 4 }}>Arrivo stimato all'auto tra {fmtDuration(snap.returnInfo.etaS * 1000)} (sperimentale)</Label>
       ) : null}

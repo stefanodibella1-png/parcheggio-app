@@ -216,3 +216,21 @@ test('17. sceso ed entrato in casa senza camminata riconosciuta (telefono in tas
   const r2 = run(s);
   assert.equal(releases(r2.events).length, 1, r2.log);
 });
+
+test('18. giri attorno agli isolati prima di parcheggiare → PARKING_SEARCH e durata della ricerca', () => {
+  const s = new Scenario().drive(300, 40, 90).circleBlocks(3, 30, 15).stopInCar(150);
+  const r = run(s);
+  const search = r.events.find((e) => e.type === 'PARKING_SEARCH');
+  const parked = r.events.find((e) => e.type === 'PARKED');
+  assert.ok(search && parked && search.t < parked.t, r.log);
+  const sess = r.sessions[0];
+  assert.ok((sess.searchDurationS ?? 0) >= 120, `ricerca di ${sess.searchDurationS} s`);
+  assert.ok((sess.searchDistanceM ?? 0) >= 300, `ricerca di ${sess.searchDistanceM} m`);
+});
+
+test('19. coda o guida lenta in linea retta → nessuna ricerca di parcheggio', () => {
+  for (const s of [new Scenario().drive(200).stopAndGo(15).drive(100), new Scenario().drive(600, 15, 90)]) {
+    const r = run(s);
+    assert.ok(!has(r.events, 'PARKING_SEARCH'), r.log);
+  }
+});
