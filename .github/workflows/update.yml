@@ -1,0 +1,45 @@
+name: Aggiornamento automatico (EAS Update)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'engine/**'
+      - 'src/**'
+      - 'App.tsx'
+      - 'index.ts'
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Token presente?
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Manca il secret EXPO_TOKEN nel repository"; exit 1
+          fi
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Dipendenze (identiche alla build APK)
+        run: |
+          npm install --no-audit --no-fund
+          npx expo install --fix
+
+      - name: Test del motore
+        run: npm run test:engine
+
+      - name: Pubblica aggiornamento
+        run: npx eas-cli@latest update --channel preview --platform android --non-interactive --message "${{ github.event.head_commit.message || 'aggiornamento manuale' }}"
