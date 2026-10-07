@@ -55,6 +55,9 @@ jobs:
           body=$(grep -n -A25 -iE "error|unable to resolve|SyntaxError" bundle.log | head -40 | sed ':a;N;$!ba;s/\n/%0A/g')
           echo "::error title=Bundle::$body"
 
+      - name: Runtime di questa APK
+        run: echo "::notice::runtimeVersion $(npx expo-updates runtimeversion:resolve --platform android 2>/dev/null)"
+
       - name: Genera progetto Android
         run: npx expo prebuild --platform android --no-install --clean
 
