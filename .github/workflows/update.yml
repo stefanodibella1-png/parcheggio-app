@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/update.yml'
       - 'engine/**'
       - 'src/**'
       - 'App.tsx'
@@ -42,4 +43,12 @@ jobs:
         run: npm run test:engine
 
       - name: Pubblica aggiornamento
-        run: npx eas-cli@latest update --channel preview --platform android --non-interactive --message "${{ github.event.head_commit.message || 'aggiornamento manuale' }}"
+        run: |
+          set -o pipefail
+          npx eas-cli@latest update --channel preview --platform android --non-interactive --message "${{ github.event.head_commit.message || 'aggiornamento manuale' }}" 2>&1 | tee update.log
+
+      - name: Riassunto errori (se fallisce)
+        if: failure()
+        run: |
+          body=$(tail -40 update.log | sed 's/\x1b\[[0-9;]*m//g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=EAS Update::$body"
