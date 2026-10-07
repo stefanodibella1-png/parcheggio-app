@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "PARCHEGGIO",
+    "slug": "parcheggio",
+    "version": "0.3.0",
+    "scheme": "parcheggio",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#0E1116",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/08c3d0c7-bd32-4382-9152-2692c6ed6864"
+    },
+    "ios": {
+      "bundleIdentifier": "com.stefanodibella.parcheggio",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "PARCHEGGIO usa la posizione per capire quando guidi, quando parcheggi e quando riparti.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Per rilevare parcheggio e ripartenza anche a telefono bloccato serve la posizione \"Sempre\".",
+        "NSMotionUsageDescription": "PARCHEGGIO usa i dati di movimento per distinguere se sei in auto o a piedi.",
+        "UIBackgroundModes": [
+          "location"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.stefanodibella.parcheggio",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "ACTIVITY_RECOGNITION",
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Per rilevare parcheggio e ripartenza anche a telefono bloccato serve la posizione \"Sempre\".",
+          "locationWhenInUsePermission": "PARCHEGGIO usa la posizione per capire quando guidi, quando parcheggi e quando riparti.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "PARCHEGGIO usa i dati di movimento per distinguere se sei in auto o a piedi."
+        }
+      ],
+      "expo-notifications",
+      "expo-sqlite",
+      "expo-updates",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "08c3d0c7-bd32-4382-9152-2692c6ed6864"
+      }
+    },
+    "owner": "stefanodibella1"
+  }
+}

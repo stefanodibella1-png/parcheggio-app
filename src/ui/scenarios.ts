@@ -1,0 +1,22 @@
+// Matrice dei test reali (sezione 16): il tester può indicare, all'avvio,
+// quali situazioni intende provare. Serve solo alla copertura nei Risultati.
+export const SCENARIOS: { id: string; label: string }[] = [
+  { id: 'cold-start', label: 'Auto già parcheggiata' },
+  { id: 'short-park', label: 'Parcheggio breve' },
+  { id: 'long-park', label: 'Parcheggio lungo' },
+  { id: 'walk-away', label: 'Uscita a piedi' },
+  { id: 'walk-near', label: "Camminata vicino all'auto" },
+  { id: 'return-later', label: 'Ritorno dopo ore' },
+  { id: 'slow-departure', label: 'Partenza lenta' },
+  { id: 'fast-departure', label: 'Partenza rapida' },
+  { id: 'traffic', label: 'Traffico / coda' },
+  { id: 'traffic-light', label: 'Semaforo' },
+  { id: 'non-park-stop', label: 'Fermata non parcheggio' },
+  { id: 'passenger', label: 'Passeggero' },
+  { id: 'pocket', label: 'Telefono in tasca' },
+  { id: 'mount', label: 'Telefono nel supporto' },
+  { id: 'locked', label: 'Telefono bloccato' },
+  { id: 'swipe-closed', label: 'App chiusa con swipe' },
+  { id: 'covered', label: 'Parcheggio coperto' },
+  { id: 'gps-poor', label: 'GPS poco preciso' },
+];

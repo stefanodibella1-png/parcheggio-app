@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ActivityRecognitionModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.activityrecognition.ActivityRecognitionModule"]
+  }
+}
