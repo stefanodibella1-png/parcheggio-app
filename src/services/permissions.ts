@@ -84,7 +84,7 @@ export async function readiness(): Promise<CheckItem[]> {
   });
 
   if (Platform.OS === 'ios') {
-    const precise = fg.ios?.accuracy !== 'reduced';
+    const precise = (fg as unknown as { ios?: { accuracy?: string } }).ios?.accuracy !== 'reduced';
     items.push({
       key: 'precise',
       label: 'Posizione esatta',

@@ -52,7 +52,7 @@ export function Button({
   style,
 }: {
   title: string;
-  onPress: () => void | Promise<void>;
+  onPress: () => unknown;
   variant?: Variant;
   disabled?: boolean;
   busy?: boolean;

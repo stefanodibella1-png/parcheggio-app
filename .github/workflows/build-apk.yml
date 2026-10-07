@@ -44,7 +44,18 @@ jobs:
 
       - name: Compila APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a 2>&1 | tee ../gradle.log
+
+      - name: Riassunto errori (se fallisce)
+        if: failure()
+        run: |
+          grep -nE "^e: |error:|ERROR|What went wrong|FAILURE|Could not|Unresolved|> " gradle.log | grep -v "^.*> Task" | head -40 > errors.txt || true
+          i=0
+          while IFS= read -r line && [ $i -lt 9 ]; do echo "::error::$line"; i=$((i+1)); done < errors.txt
+          body=$(sed -n '/What went wrong/,/Try:/p' gradle.log | head -30 | sed ':a;N;$!ba;s/\n/%0A/g')
+          [ -n "$body" ] && echo "::error title=Gradle::$body" || true
 
       - name: Rinomina APK
         run: cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
