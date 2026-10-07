@@ -203,3 +203,16 @@ test('arrivo con direzione di marcia e indirizzo impostabile senza influenzare i
   assert.equal(e.getOpenSession()!.spot.address?.street, 'Via Etnea');
   assert.equal(e.state, 'PARKED');
 });
+
+test('17. sceso ed entrato in casa senza camminata riconosciuta (telefono in tasca, GPS indoor) → PARKED_USER_AWAY, nessun rilascio', () => {
+  const quiet = { activity: 'UNKNOWN' as const, activityConfidence: 40, steps: 0 };
+  const s = new Scenario().drive(300).stopInCar(150).walk(60, 0, 4.5, quiet).stand(300, { ...quiet, accuracy: 20, noiseM: 15 });
+  const r = run(s);
+  assert.ok(has(r.events, 'PARKED'), r.log);
+  assert.equal(r.final.state, 'PARKED_USER_AWAY', r.log);
+  assert.equal(releases(r.events).length, 0, r.log);
+  // più tardi torna all'auto e riparte: il rilascio deve arrivare
+  s.walk(60, 180, 4.5).stopInCar(30).drive(120, 35, 90);
+  const r2 = run(s);
+  assert.equal(releases(r2.events).length, 1, r2.log);
+});

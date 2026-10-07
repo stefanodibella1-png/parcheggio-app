@@ -106,6 +106,7 @@ interface Memory {
   departure: Departure | null;
   departureCandidateSince: number | null;
   awayVehicleLogged: boolean;
+  farSince?: number | null;
 
   returnSeries: { t: number; d: number }[];
 
@@ -189,6 +190,7 @@ export class DetectionEngine {
       departure: null,
       departureCandidateSince: null,
       awayVehicleLogged: false,
+      farSince: null,
       returnSeries: [],
       scores: { ...ZERO },
       lastSnapshotT: 0,
@@ -792,6 +794,22 @@ export class DetectionEngine {
     this.transition('PARKED', reason, now, { parkingId });
   }
 
+  /**
+   * Lontano dall'auto senza essere in un veicolo: si è scesi e si è entrati in un
+   * edificio (camminata spesso non riconosciuta con il telefono in tasca e GPS indoor).
+   */
+  private farFromCar(c: Ctx, d: number | null): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    const ok = d !== null && d > cfg.AWAY_FAR_DISTANCE && !c.vehicleConfirmed && (c.kmh === null || c.kmh <= cfg.WALKING_SPEED_MAX);
+    if (!ok) {
+      m.farSince = null;
+      return false;
+    }
+    m.farSince = m.farSince ?? c.now;
+    return c.now - m.farSince >= cfg.AWAY_STILL_S * 1000;
+  }
+
   private evalParkedNear(c: Ctx): void {
     const cfg = this.cfg;
     const m = this.m;
@@ -808,6 +826,12 @@ export class DetectionEngine {
         return;
       }
       return; // cammina vicino all'auto
+    }
+    if (this.farFromCar(c, d)) {
+      m.returnSeries = [];
+      m.farSince = null;
+      this.transition('PARKED_USER_AWAY', `a ${d} m dall'auto da ${this.cfg.AWAY_STILL_S} s senza veicolo: sei sceso, il parcheggio resta occupato`, c.now);
+      return;
     }
     const startMoving =
       c.wScore < 50 &&
@@ -892,8 +916,20 @@ export class DetectionEngine {
       }
       return;
     }
+    const d = this.distanceFromSpot(c.now);
+    if (this.farFromCar(c, d)) {
+      m.returnSeries = [];
+      m.farSince = null;
+      this.transition('PARKED_USER_AWAY', `nessun veicolo, a ${d} m dall'auto: era uno spostamento a piedi`, c.now);
+      return;
+    }
     if (c.now - since >= cfg.DEPARTURE_CANDIDATE_TIMEOUT_S * 1000) {
-      this.transition('PARKED', `nessuna partenza confermata in ${cfg.DEPARTURE_CANDIDATE_TIMEOUT_S} s`, c.now);
+      if (d !== null && d > cfg.AWAY_DISTANCE) {
+        m.returnSeries = [];
+        this.transition('PARKED_USER_AWAY', `nessuna partenza confermata in ${cfg.DEPARTURE_CANDIDATE_TIMEOUT_S} s, a ${d} m dall'auto`, c.now);
+      } else {
+        this.transition('PARKED', `nessuna partenza confermata in ${cfg.DEPARTURE_CANDIDATE_TIMEOUT_S} s`, c.now);
+      }
     }
   }
 

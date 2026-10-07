@@ -51,6 +51,9 @@ export interface DetectionConfig {
   RETURN_RADIUS: number;
   /** distanza a piedi oltre la quale l'utente è "lontano dall'auto" */
   AWAY_DISTANCE: number;
+  /** oltre questa distanza, fermi e senza veicolo per AWAY_STILL_S, si è "lontani dall'auto" anche senza camminata riconosciuta */
+  AWAY_FAR_DISTANCE: number;
+  AWAY_STILL_S: number;
   /** distanza percorsa senza conferma oltre la quale si chiude come LOW_CONFIDENCE */
   RELEASE_GIVE_UP_DISTANCE: number;
 
@@ -137,6 +140,8 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   MIN_DEPARTURE_DISTANCE: 60,
   RETURN_RADIUS: 30,
   AWAY_DISTANCE: 30,
+  AWAY_FAR_DISTANCE: 50,
+  AWAY_STILL_S: 30,
   RELEASE_GIVE_UP_DISTANCE: 300,
 
   MIN_VEHICLE_CONFIDENCE: 70,
