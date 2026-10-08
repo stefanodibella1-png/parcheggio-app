@@ -12,7 +12,7 @@ const token = (await client.getAccessToken()).token;
 async function api(method, url, body) {
   const r = await fetch(url, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-goog-user-project': pid },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await r.text();
