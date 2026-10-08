@@ -74,8 +74,19 @@ export function StateCard({ snap, now }: { snap: EngineSnapshot | null; now: num
       {snap?.searchingSinceT ? (
         <Label dim style={{ marginTop: 4 }}>🔎 Probabile ricerca di parcheggio da {fmtDuration(now - snap.searchingSinceT)} (sperimentale)</Label>
       ) : null}
-      {snap?.returnInfo && state === 'RETURN_PREDICTED' && snap.returnInfo.etaS !== null ? (
-        <Label dim style={{ marginTop: 4 }}>Arrivo stimato all'auto tra {fmtDuration(snap.returnInfo.etaS * 1000)} (sperimentale)</Label>
+      {snap?.returnInfo && state === 'RETURN_PREDICTED' && snap.returnInfo.releaseEtaS !== null ? (
+        <View style={{ marginTop: space.sm, padding: space.sm, borderRadius: 8, backgroundColor: c.cardAlt }}>
+          <Label bold>Il tuo posto si libererà tra ~{Math.max(1, Math.round(snap.returnInfo.releaseEtaS / 60))} min</Label>
+          <Label dim size={13}>
+            sei a {snap.returnInfo.distanceM} m dall'auto
+            {snap.returnInfo.etaS !== null ? ` · arrivo stimato tra ${fmtDuration(snap.returnInfo.etaS * 1000)}` : ''}
+          </Label>
+        </View>
+      ) : null}
+      {state === 'USER_RETURNING' && snap?.returnInfo ? (
+        <View style={{ marginTop: space.sm, padding: space.sm, borderRadius: 8, backgroundColor: c.cardAlt }}>
+          <Label bold>Il tuo posto si sta per liberare</Label>
+        </View>
       ) : null}
       <View style={{ marginTop: space.lg }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

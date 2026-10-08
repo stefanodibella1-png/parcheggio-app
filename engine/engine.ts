@@ -1287,6 +1287,11 @@ export class DetectionEngine {
   }
 
   private returnScore(now: number): number {
+    return Math.max(this.returnScoreShort(now), this.returnScoreLong(now));
+  }
+
+  /** avvicinamento continuo nell'ultimo minuto (GPS frequente) */
+  private returnScoreShort(now: number): number {
     const cfg = this.cfg;
     const m = this.m;
     const series = m.returnSeries.filter((x) => (now - x.t) / 1000 <= cfg.RETURN_MIN_APPROACH_TIME_S);
@@ -1299,33 +1304,67 @@ export class DetectionEngine {
     let dec = 0;
     for (let i = 1; i < series.length; i++) if (series[i].d <= series[i - 1].d + 2) dec++;
     const mono = dec / (series.length - 1);
-    let headingComp = 0.5;
+    const score = 60 * clamp01(approach / cfg.RETURN_MIN_APPROACH_M) + 20 * clamp01((mono - 0.5) / 0.4) + 20 * this.headingToCar(now);
+    return r1(score);
+  }
+
+  /** avvicinamento netto e marcato su qualche minuto (GPS rado, telefono in tasca) */
+  private returnScoreLong(now: number): number {
+    const cfg = this.cfg;
+    const series = this.m.returnSeries.filter((x) => (now - x.t) / 1000 <= cfg.RETURN_LONG_WINDOW_S);
+    if (series.length < 3) return 0;
+    const first = series[0];
+    const last = series[series.length - 1];
+    if ((last.t - first.t) / 1000 < cfg.RETURN_MIN_APPROACH_TIME_S) return 0;
+    const maxD = Math.max(...series.map((x) => x.d));
+    const minD = Math.min(...series.map((x) => x.d));
+    const approach = maxD - last.d;
+    // l'ultimo punto deve essere (quasi) il più vicino: si sta ancora avvicinando
+    if (approach < cfg.RETURN_LONG_APPROACH_M || last.d > minD + 15) return 0;
+    const score = 50 + 30 * clamp01(approach / (cfg.RETURN_LONG_APPROACH_M * 2)) + 20 * this.headingToCar(now);
+    return r1(score);
+  }
+
+  /** 1 = direzione verso l'auto, 0 = opposta, 0.5 = sconosciuta */
+  private headingToCar(now: number): number {
+    const m = this.m;
     const f = this.lastValidFix(now);
     if (f && f.heading !== null && f.heading !== undefined && m.session) {
-      headingComp = angleDiff(f.heading, bearingDeg(f, m.session.spot.pointFinal)) <= 45 ? 1 : 0;
+      return angleDiff(f.heading, bearingDeg(f, m.session.spot.pointFinal)) <= 45 ? 1 : 0;
     }
-    const score = 60 * clamp01(approach / cfg.RETURN_MIN_APPROACH_M) + 20 * clamp01((mono - 0.5) / 0.4) + 20 * headingComp;
-    return r1(score);
+    return 0.5;
   }
 
   private returnInfo(now: number): ReturnInfo | null {
     const m = this.m;
+    const cfg = this.cfg;
     if (!m.session || !(m.state === 'PARKED_USER_AWAY' || m.state === 'RETURN_PREDICTED' || m.state === 'USER_RETURNING')) return null;
     const f = this.lastValidFix(now, 120);
     if (!f) return null;
     const d = distanceM(m.session.spot.pointFinal, f);
-    const series = m.returnSeries.filter((x) => (now - x.t) / 1000 <= this.cfg.RETURN_MIN_APPROACH_TIME_S);
+    // velocità di avvicinamento: finestra breve, poi lunga se il GPS è rado
     let approach: number | null = null;
-    if (series.length >= 2) {
-      const dt = (series[series.length - 1].t - series[0].t) / 1000;
-      if (dt > 0) approach = (series[0].d - series[series.length - 1].d) / dt;
+    for (const win of [cfg.RETURN_MIN_APPROACH_TIME_S, cfg.RETURN_LONG_WINDOW_S]) {
+      const series = m.returnSeries.filter((x) => (now - x.t) / 1000 <= win);
+      if (series.length >= 2) {
+        const dt = (series[series.length - 1].t - series[0].t) / 1000;
+        if (dt >= 20) {
+          approach = (series[0].d - series[series.length - 1].d) / dt;
+          break;
+        }
+      }
     }
+    let etaS: number | null = null;
+    if (m.state === 'USER_RETURNING') etaS = 0;
+    else if (approach !== null && approach > 0.2) etaS = Math.round(d / Math.min(approach, 2.5));
+    else if (m.state === 'RETURN_PREDICTED') etaS = Math.round(d / cfg.RETURN_WALK_SPEED_MS);
     return {
       distanceM: Math.round(d),
       approachSpeedMs: approach === null ? null : r1(approach),
-      etaS: approach !== null && approach > 0.2 ? Math.round(d / approach) : null,
+      etaS,
       headingToCarDeg: Math.round(bearingDeg(f, m.session.spot.pointFinal)),
       sinceParkS: Math.round((now - (m.session.parkedT ?? m.session.startT)) / 1000),
+      releaseEtaS: etaS === null ? null : etaS + cfg.RETURN_DEPART_DELAY_S,
     };
   }
 

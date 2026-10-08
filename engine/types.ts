@@ -189,6 +189,8 @@ export interface ReturnInfo {
   etaS: number | null;
   headingToCarDeg: number | null;
   sinceParkS: number;
+  /** stima di quando il posto sarà libero: arrivo all'auto + tempo per partire (s) */
+  releaseEtaS: number | null;
 }
 
 export interface EngineSnapshot {

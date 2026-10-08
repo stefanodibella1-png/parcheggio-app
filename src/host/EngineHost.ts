@@ -29,7 +29,7 @@ import {
 } from '../sensors/location.ts';
 import { activityHistory, bufferedActivities, startActivity, stopActivity } from '../sensors/activity.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
-import { notifyEvent, setupNotifications } from '../services/notifications.ts';
+import { inMinutes, notifyEvent, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
 import { deviceInfo } from '../services/deviceInfo.ts';
 import { readiness, statusMap } from '../services/permissions.ts';
@@ -80,6 +80,8 @@ class Host {
   private geocodeTimer: ReturnType<typeof setInterval> | null = null;
   private initPromise: Promise<void> | null = null;
   private lastPersistT = 0;
+  /** ultimo testo/ora della notifica di ritorno (per aggiornarla senza spam) */
+  private returnNote: { key: string; t: number } | null = null;
   private notifyQueued = false;
   private counts = { location: [] as number[], activity: [] as number[], motion: [] as number[] };
   private geocodeAttempts = new Map<string, number>();
@@ -372,7 +374,29 @@ class Host {
     this.state.session = this.engine.getOpenSession();
     this.state.sessions = this.engine.getSessions();
     this.state.locationMode = getLocationMode();
+    this.maybeUpdateReturnNotification();
     this.emitChange();
+  }
+
+  /** Mentre torni all'auto, la notifica mostra minuti e distanza aggiornati. */
+  private maybeUpdateReturnNotification(): void {
+    const snap = this.state.snapshot;
+    const testId = this.state.testId;
+    if (!testId || !snap || snap.state !== 'RETURN_PREDICTED' || !snap.returnInfo) {
+      if (snap && snap.state !== 'RETURN_PREDICTED') this.returnNote = null;
+      return;
+    }
+    const ri = snap.returnInfo;
+    const key = `${ri.releaseEtaS === null ? '-' : inMinutes(ri.releaseEtaS)}|${Math.round(ri.distanceM / 25)}`;
+    const now = Date.now();
+    if (!this.returnNote) {
+      // la prima notifica la invia l'evento RETURN_PREDICTED
+      this.returnNote = { key, t: now };
+      return;
+    }
+    if (key === this.returnNote.key || now - this.returnNote.t < 15_000) return;
+    this.returnNote = { key, t: now };
+    void updateReturnNotification(testId, this.state.session, ri);
   }
 
   // ---- effetti degli eventi --------------------------------------------------------------
@@ -392,7 +416,7 @@ class Host {
         await stopGeofences().catch(() => {});
         await this.geocode(session);
       }
-      await notifyEvent(e, session ?? null, testId);
+      await notifyEvent(e, session ?? null, testId, this.engine.snapshot().returnInfo);
     }
     const last = events[events.length - 1];
     await this.applySideEffectsForState(last.to);

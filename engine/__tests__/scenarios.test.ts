@@ -245,3 +245,39 @@ test('20. fermo in casa lontano dall\'auto, poi cammina all\'auto (con un picco 
   assert.equal(rel[0].type, 'PARKING_RELEASED', r.log);
   assert.ok(rel[0].data.checks?.some((c) => c.startsWith('✓ partenza a')), r.log);
 });
+
+test('21. ritorno all\'auto con GPS rado (fix ogni 12 s) → RETURN_PREDICTED con stima del posto libero', () => {
+  const s = new Scenario().drive(300).stopInCar(150).walk(300, 0).stand(60).silence(1800);
+  const backFrom = s.t;
+  s.walk(300, 180).stopInCar(30).drive(120, 35, 90);
+  const backTo = s.t;
+  let lastKept = -Infinity;
+  const thinned = s.inputs.filter((i) => {
+    if (i.kind !== 'location' || i.sample.t < backFrom || i.sample.t > backTo - 150_000) return true;
+    if (i.sample.t - lastKept >= 12_000) {
+      lastKept = i.sample.t;
+      return true;
+    }
+    return false;
+  });
+  const r = replay(thinned);
+  const log = trace(r.events, r.t0);
+  const pred = r.events.find((e) => e.type === 'RETURN_PREDICTED');
+  assert.ok(pred, log);
+  const rel = releases(r.events);
+  assert.equal(rel.length, 1, log);
+  assert.ok(rel[0].t - pred!.t > 60_000, 'la previsione deve anticipare il rilascio');
+  const snap = r.snapshots.find((x) => x.state === 'RETURN_PREDICTED' && x.returnInfo);
+  assert.ok(snap, log);
+  assert.ok(snap!.returnInfo!.etaS !== null && snap!.returnInfo!.etaS! > 0, JSON.stringify(snap!.returnInfo));
+  assert.equal(snap!.returnInfo!.releaseEtaS, snap!.returnInfo!.etaS! + 60);
+});
+
+test('22. a piedi in giro senza tornare all\'auto → nessuna previsione di ritorno', () => {
+  // si allontana, gira l'angolo e prosegue (la distanza dall'auto non diminuisce mai)
+  const s = new Scenario().drive(300).stopInCar(150).walk(240, 0).stand(60).walk(300, 90).stand(120).walk(200, 0);
+  const r = run(s);
+  assert.ok(has(r.events, 'PARKED_USER_AWAY'), r.log);
+  assert.ok(!has(r.events, 'RETURN_PREDICTED'), r.log);
+  assert.equal(releases(r.events).length, 0, r.log);
+});

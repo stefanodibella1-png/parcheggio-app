@@ -84,6 +84,14 @@ export interface DetectionConfig {
   RETURN_MIN_CONFIDENCE: number;
   RETURN_CANCEL_S: number;
   RETURN_GEOFENCE_RADII: number[];
+  /** finestra lunga per GPS rado (telefono in tasca, fix ogni 10-15 s) */
+  RETURN_LONG_WINDOW_S: number;
+  /** avvicinamento netto richiesto nella finestra lunga (m) */
+  RETURN_LONG_APPROACH_M: number;
+  /** velocità di camminata usata se quella misurata non è affidabile (m/s) */
+  RETURN_WALK_SPEED_MS: number;
+  /** tempo tipico tra arrivo all'auto e partenza (s), per "posto libero tra…" */
+  RETURN_DEPART_DELAY_S: number;
 
   // --- ricerca del parcheggio (sperimentale) ---
   /** finestra di guida analizzata (s) */
@@ -179,6 +187,10 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_MIN_CONFIDENCE: 70,
   RETURN_CANCEL_S: 60,
   RETURN_GEOFENCE_RADII: [500, 200, 50],
+  RETURN_LONG_WINDOW_S: 180,
+  RETURN_LONG_APPROACH_M: 80,
+  RETURN_WALK_SPEED_MS: 1.2,
+  RETURN_DEPART_DELAY_S: 60,
 
   SEARCH_WINDOW_S: 180,
   SEARCH_MIN_SPEED: 5,
