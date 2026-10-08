@@ -46,3 +46,21 @@ export function currentUpdateLabel(): string {
   const d = Updates.createdAt ? ` · ${Updates.createdAt.toLocaleString('it-IT')}` : '';
   return `${id}${d}`;
 }
+
+/** Pulsante "Aggiorna ora": cerca, scarica e riavvia subito (solo senza test attivo). */
+export async function updateNow(): Promise<'reloading' | 'none' | 'error' | 'disabled'> {
+  if (__DEV__ || !Updates.isEnabled) return 'disabled';
+  try {
+    if (!pending) {
+      const r = await Updates.checkForUpdateAsync();
+      if (!r.isAvailable) return 'none';
+      const f = await Updates.fetchUpdateAsync();
+      if (!f.isNew) return 'none';
+      pending = true;
+    }
+    await Updates.reloadAsync();
+    return 'reloading';
+  } catch {
+    return 'error';
+  }
+}

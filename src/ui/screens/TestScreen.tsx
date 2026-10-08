@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Pressable, ScrollView, Text, View } from 'react-native';
 import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
-import { updatePending } from '../../services/updates.ts';
+import { currentUpdateLabel, updateNow, updatePending } from '../../services/updates.ts';
 import { Button, Card, Label, SectionTitle, Title } from '../components/basics.tsx';
 import { CarCard, Checklist, CommunityCard, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
 import { SCENARIOS } from '../scenarios.ts';
@@ -17,6 +17,7 @@ export function TestScreen({ nav }: { nav: Nav }) {
   const [items, setItems] = useState<CheckItem[]>([]);
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [updMsg, setUpdMsg] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     readiness().then(setItems).catch(() => setItems([]));
@@ -80,6 +81,26 @@ export function TestScreen({ nav }: { nav: Nav }) {
           <Title>PARCHEGGIO</Title>
           {updatePending() ? <Label size={12} color={c.ok}>aggiornamento pronto</Label> : null}
         </View>
+        {s.active && updatePending() ? (
+          <Card style={{ marginTop: space.md, borderColor: c.ok }}>
+            <Label color={c.ok}>Aggiornamento scaricato: si installa da solo quando premi FERMA TEST.</Label>
+          </Card>
+        ) : null}
+        {!s.active ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm }}>
+            <Label dim size={12}>Versione {currentUpdateLabel()}</Label>
+            <Button
+              small
+              variant="ghost"
+              title={updMsg ?? 'Aggiorna app ora'}
+              onPress={async () => {
+                setUpdMsg('Controllo…');
+                const r = await updateNow();
+                setUpdMsg(r === 'none' ? 'Già aggiornata ✓' : r === 'error' ? 'Rete assente, riprova' : r === 'disabled' ? 'Non disponibile' : 'Riavvio…');
+              }}
+            />
+          </View>
+        ) : null}
         {s.error ? (
           <Card style={{ marginTop: space.md, borderColor: c.danger }}>
             <Label color={c.danger}>{s.error}</Label>
