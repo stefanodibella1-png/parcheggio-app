@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, Text, View } from 'react-native';
 import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
 import { updatePending } from '../../services/updates.ts';
@@ -24,6 +24,13 @@ export function TestScreen({ nav }: { nav: Nav }) {
   useEffect(() => {
     if (!s.active) refresh();
   }, [s.active, refresh]);
+  // di ritorno dalle impostazioni del telefono: ricontrolla
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') refresh();
+    });
+    return () => sub.remove();
+  }, [refresh]);
 
   const blocking = items.filter((i) => i.level === 'bad' && (i.key === 'locationFg' || i.key === 'gps'));
   const missing = items.filter((i) => i.level !== 'ok');

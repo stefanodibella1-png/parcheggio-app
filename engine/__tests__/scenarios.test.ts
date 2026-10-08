@@ -354,3 +354,27 @@ test('27. nuovo test con l\'auto parcheggiata nel test precedente → riparte da
   assert.equal(releases(r2.events).length, 1, log);
   assert.equal(releases(r2.events)[0].type, 'PARKING_RELEASED', log);
 });
+
+test('28. fermo 2,5 min in auto a un semaforo (OpenStreetMap) e riparte → nessun parcheggio; a piedi o dopo 5 min → parcheggio', () => {
+  const mk = (stopS: number, walk: boolean) => {
+    const s = new Scenario().drive(300);
+    const sig: EngineInput = { kind: 'mapFeatures', t: s.t - 60_000, signals: [{ latitude: s.lat + 0.0001, longitude: s.lon }] };
+    s.stopInCar(stopS);
+    if (walk) s.walk(300, 0).stand(60);
+    else s.drive(120);
+    return run2([...s.inputs, sig]);
+  };
+  const short = mk(150, false);
+  assert.ok(!has(short.events, 'PARKED'), short.log);
+  assert.equal(releases(short.events).length, 0, short.log);
+  const walked = mk(60, true);
+  assert.ok(has(walked.events, 'PARKED'), walked.log);
+  const long = mk(360, false);
+  assert.ok(has(long.events, 'PARKED'), long.log);
+  assert.match(long.events.find((e) => e.type === 'PARKED')!.reason, /semaforo/);
+});
+
+function run2(inputs: EngineInput[]) {
+  const r = replay(inputs);
+  return { ...r, log: trace(r.events, r.t0) };
+}

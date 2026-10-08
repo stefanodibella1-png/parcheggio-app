@@ -54,6 +54,8 @@ export type EngineInput =
   | { kind: 'motion'; sample: MotionFeatures }
   | { kind: 'tick'; t: number }
   | { kind: 'geofence'; t: number; region: string; event: 'enter' | 'exit' }
+  /** semafori della zona (OpenStreetMap), scaricati dall'app e registrati per il replay */
+  | { kind: 'mapFeatures'; t: number; signals: { latitude: number; longitude: number }[] }
   /** parcheggio rilevato automaticamente nel test precedente e ancora aperto (mai input manuale) */
   | { kind: 'carryOver'; t: number; fromTestId: string; parkedT: number; spot: ParkingSpot; exitedOnFoot?: boolean; gpsLostAtPark?: boolean };
 

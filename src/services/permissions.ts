@@ -1,16 +1,30 @@
 // Checklist di prontezza e richiesta dei permessi.
 import * as Battery from 'expo-battery';
+import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { ActivityRecognition } from '../../modules/activity-recognition/index.ts';
 import { motionAvailable } from '../sensors/motion.ts';
+import { kvGet, kvSet } from '../storage/db.ts';
 
 export type Level = 'ok' | 'warn' | 'bad';
 
 export interface CheckItem {
-  key: 'locationFg' | 'locationBg' | 'precise' | 'motion' | 'notifications' | 'gps' | 'battery' | 'power' | 'accelerometer';
+  key:
+    | 'locationFg'
+    | 'locationBg'
+    | 'precise'
+    | 'motion'
+    | 'notifications'
+    | 'gps'
+    | 'battery'
+    | 'vendorBattery'
+    | 'autostart'
+    | 'recentsLock'
+    | 'power'
+    | 'accelerometer';
   label: string;
   level: Level;
   detail: string;
@@ -18,6 +32,8 @@ export interface CheckItem {
   impact: string;
   action: (() => Promise<void>) | null;
   actionLabel: string | null;
+  /** impostazioni che il telefono non permette di leggere: l'utente conferma di averle fatte */
+  confirm?: (() => Promise<void>) | null;
 }
 
 async function openSettings(): Promise<void> {
@@ -175,6 +191,8 @@ export async function readiness(): Promise<CheckItem[]> {
       actionLabel: optimized === false ? null : 'Apri impostazioni batteria',
     });
   }
+  if (Platform.OS === 'android') items.push(...(await vendorItems()));
+
   const power = await powerState();
   items.push({
     key: 'power',
@@ -210,5 +228,154 @@ export async function powerState(): Promise<{ level: number | null; lowPower: bo
 export function statusMap(items: CheckItem[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const i of items) out[i.key] = `${i.level}: ${i.detail}`;
+  return out;
+}
+
+// ---- impostazioni dei produttori (Xiaomi, Samsung, Oppo, Huawei…) ------------------------
+
+const PKG = 'com.stefanodibella.parcheggio';
+const LABEL = 'PARCHEGGIO';
+
+type Vendor = 'xiaomi' | 'samsung' | 'oppo' | 'vivo' | 'huawei' | 'other';
+
+export function vendor(): Vendor {
+  const m = `${Device.manufacturer ?? ''} ${Device.brand ?? ''}`.toLowerCase();
+  if (/xiaomi|redmi|poco/.test(m)) return 'xiaomi';
+  if (/samsung/.test(m)) return 'samsung';
+  if (/oppo|realme|oneplus/.test(m)) return 'oppo';
+  if (/vivo|iqoo/.test(m)) return 'vivo';
+  if (/huawei|honor/.test(m)) return 'huawei';
+  return 'other';
+}
+
+/** Prova ad aprire una schermata di sistema; se non esiste su questo telefono passa alla successiva. */
+async function openFirst(
+  targets: ({ packageName: string; className: string; extra?: Record<string, string> } | 'appDetails')[],
+): Promise<void> {
+  for (const t of targets) {
+    try {
+      if (t === 'appDetails') {
+        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS, { data: `package:${PKG}` });
+      } else {
+        await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+          packageName: t.packageName,
+          className: t.className,
+          extra: t.extra,
+        });
+      }
+      return;
+    } catch {
+      // schermata non presente: si prova la prossima
+    }
+  }
+}
+
+async function confirmed(key: string): Promise<boolean> {
+  return (await kvGet(`setup:${key}`).catch(() => null)) === '1';
+}
+
+function confirmer(key: string): () => Promise<void> {
+  return async () => {
+    await kvSet(`setup:${key}`, '1').catch(() => {});
+  };
+}
+
+async function vendorItems(): Promise<CheckItem[]> {
+  const v = vendor();
+  const out: CheckItem[] = [];
+  const impact = 'Senza questa impostazione il telefono sospende PARCHEGGIO in background e il test perde guida e parcheggi.';
+
+  if (v === 'xiaomi') {
+    const auto = await confirmed('autostart');
+    out.push({
+      key: 'autostart',
+      label: 'Avvio automatico (Xiaomi)',
+      level: auto ? 'ok' : 'warn',
+      detail: auto ? 'Confermato' : 'Da attivare: tocca il pulsante e accendi PARCHEGGIO',
+      impact,
+      action: auto
+        ? null
+        : () =>
+            openFirst([
+              { packageName: 'com.miui.securitycenter', className: 'com.miui.permcenter.autostart.AutoStartManagementActivity' },
+              'appDetails',
+            ]),
+      actionLabel: auto ? null : 'Apri avvio automatico',
+      confirm: auto ? null : confirmer('autostart'),
+    });
+    const bat = await confirmed('vendorBattery');
+    out.push({
+      key: 'vendorBattery',
+      label: 'Risparmio batteria Xiaomi',
+      level: bat ? 'ok' : 'warn',
+      detail: bat ? 'Confermato' : 'Scegli "Nessuna restrizione" per PARCHEGGIO',
+      impact,
+      action: bat
+        ? null
+        : () =>
+            openFirst([
+              {
+                packageName: 'com.miui.powerkeeper',
+                className: 'com.miui.powerkeeper.ui.HiddenAppsConfigActivity',
+                extra: { package_name: PKG, package_label: LABEL },
+              },
+              'appDetails',
+            ]),
+      actionLabel: bat ? null : 'Apri risparmio batteria',
+      confirm: bat ? null : confirmer('vendorBattery'),
+    });
+  } else if (v === 'samsung') {
+    const ok = await confirmed('vendorBattery');
+    out.push({
+      key: 'vendorBattery',
+      label: 'App mai in sospensione (Samsung)',
+      level: ok ? 'ok' : 'warn',
+      detail: ok ? 'Confermato' : 'Batteria › Limiti utilizzo in background › App mai in sospensione › aggiungi PARCHEGGIO',
+      impact,
+      action: ok
+        ? null
+        : () =>
+            openFirst([
+              { packageName: 'com.samsung.android.lool', className: 'com.samsung.android.sm.battery.ui.BatteryActivity' },
+              'appDetails',
+            ]),
+      actionLabel: ok ? null : 'Apri batteria',
+      confirm: ok ? null : confirmer('vendorBattery'),
+    });
+  } else if (v === 'oppo' || v === 'vivo' || v === 'huawei') {
+    const auto = await confirmed('autostart');
+    const targets: Parameters<typeof openFirst>[0] =
+      v === 'oppo'
+        ? [{ packageName: 'com.coloros.safecenter', className: 'com.coloros.safecenter.permission.startup.StartupAppListActivity' }, 'appDetails']
+        : v === 'vivo'
+          ? [{ packageName: 'com.vivo.permissionmanager', className: 'com.vivo.permissionmanager.activity.BgStartUpManagerActivity' }, 'appDetails']
+          : [{ packageName: 'com.huawei.systemmanager', className: 'com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity' }, 'appDetails'];
+    out.push({
+      key: 'autostart',
+      label: 'Avvio automatico / attività in background',
+      level: auto ? 'ok' : 'warn',
+      detail: auto ? 'Confermato' : 'Consenti a PARCHEGGIO di avviarsi e restare attiva in background',
+      impact,
+      action: auto ? null : () => openFirst(targets),
+      actionLabel: auto ? null : 'Apri impostazioni',
+      confirm: auto ? null : confirmer('autostart'),
+    });
+  }
+
+  if (v !== 'other' && v !== 'samsung') {
+    const lock = await confirmed('recentsLock');
+    out.push({
+      key: 'recentsLock',
+      label: 'Blocca nelle app recenti',
+      level: lock ? 'ok' : 'warn',
+      detail: lock
+        ? 'Confermato'
+        : 'Apri le app recenti, tieni premuto su PARCHEGGIO e tocca il lucchetto 🔒',
+      impact,
+      action: null,
+      actionLabel: null,
+      confirm: lock ? null : confirmer('recentsLock'),
+    });
+  }
   return out;
 }

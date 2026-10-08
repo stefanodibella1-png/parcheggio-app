@@ -80,6 +80,10 @@ export interface DetectionConfig {
 
   // --- previsione di ritorno (11-bis) ---
   /** GPS perso entrando in un garage/zona coperta: max secondi tra l'ultimo fix in auto e la camminata */
+  /** sosta entro questa distanza da un semaforo (OpenStreetMap): il tempo da solo non basta (m) */
+  SIGNAL_RADIUS_M: number;
+  /** vicino a un semaforo, sosta in auto necessaria per confermare il parcheggio senza discesa a piedi (s) */
+  SIGNAL_MIN_PARKING_S: number;
   NO_GPS_PARK_MAX_GAP_S: number;
   /** precisione assegnata al punto stimato in quel caso (m) */
   NO_GPS_PARK_ACCURACY_M: number;
@@ -202,6 +206,8 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RECURRING_SPOT_MIN_SESSIONS: 3,
   GEOCODE_MAX_RETRIES: 5,
 
+  SIGNAL_RADIUS_M: 35,
+  SIGNAL_MIN_PARKING_S: 300,
   NO_GPS_PARK_MAX_GAP_S: 300,
   NO_GPS_PARK_ACCURACY_M: 60,
   NO_GPS_DEPARTURE_RADIUS: 500,

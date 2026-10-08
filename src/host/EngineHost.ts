@@ -31,6 +31,7 @@ import { activityHistory, bufferedActivities, startActivity, stopActivity } from
 import { startMotion, stopMotion } from '../sensors/motion.ts';
 import { inMinutes, notifyEvent, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
+import { signalsForTile, tileKey } from '../services/osm.ts';
 import { deviceInfo } from '../services/deviceInfo.ts';
 import { powerState, readiness, statusMap } from '../services/permissions.ts';
 import { applyPendingUpdate } from '../services/updates.ts';
@@ -87,6 +88,13 @@ class Host {
   /** ultimo controllo di batteria / risparmio energetico durante il test */
   private lastPowerT = 0;
   private lowPowerWarned = false;
+  /** zone OpenStreetMap già caricate in questo test, e tentativi falliti (per riprovare più tardi) */
+  private osmTiles = new Set<string>();
+  private osmFailedT = new Map<string, number>();
+  private osmBusy = false;
+  /** ultima posizione ricevuta (ora del telefono) e ultimo avviso di app sospesa */
+  private lastLocRecvT = 0;
+  private suspendWarnT = 0;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -239,6 +247,9 @@ class Host {
       lastStopped: null,
     };
     this.counts = { location: [], activity: [], motion: [] };
+    this.osmTiles = new Set();
+    this.osmFailedT = new Map();
+    this.lastLocRecvT = 0;
     this.startTimers();
     this.startForegroundSensors();
     startActivity((a) => this.ingestActivity(a));
@@ -342,6 +353,19 @@ class Host {
       this.lastPowerT = now;
       void this.logPower(now);
     }
+    // app sospesa dal telefono: in modalità continua le posizioni arrivano ogni secondo
+    if (this.lastLocRecvT > 0 && getLocationMode() === 'high' && now - this.lastLocRecvT > 180_000 && now - this.suspendWarnT > 1800_000) {
+      this.suspendWarnT = now;
+      const min = Math.round((now - this.lastLocRecvT) / 60000);
+      void notifyWarning(
+        '⚠️ Il telefono ha sospeso PARCHEGGIO',
+        `Nessun dato per ${min} min. Apri l'app › Test e completa le impostazioni consigliate (avvio automatico, blocco nelle app recenti).`,
+        'warning-suspended',
+      );
+    }
+    this.lastLocRecvT = now;
+    const last = samples[samples.length - 1];
+    if (last) void this.loadSignals(last.latitude, last.longitude, now);
     this.pump(now);
   }
 
@@ -358,6 +382,28 @@ class Host {
     this.counts.motion.push(Date.now());
     this.state.rates.lastMotionT = f.t;
     this.push({ kind: 'motion', sample: f });
+  }
+
+  /** Scarica (una volta per zona) i semafori OpenStreetMap e li passa al motore come input registrato. */
+  private async loadSignals(lat: number, lon: number, now: number): Promise<void> {
+    const key = tileKey(lat, lon);
+    if (this.osmBusy || this.osmTiles.has(key)) return;
+    if (now - (this.osmFailedT.get(key) ?? 0) < 600_000) return;
+    this.osmBusy = true;
+    try {
+      const list = await signalsForTile(key, now);
+      if (list === null) {
+        this.osmFailedT.set(key, now);
+        return;
+      }
+      this.osmTiles.add(key);
+      if (!this.state.active || list.length === 0) return;
+      const t = Date.now();
+      this.push({ kind: 'mapFeatures', t, signals: list });
+      this.pump(t);
+    } finally {
+      this.osmBusy = false;
+    }
   }
 
   /** Registra batteria e risparmio energetico nel test (ogni 5 min): spiega i buchi nei dati. */
@@ -380,6 +426,7 @@ class Host {
       await notifyWarning(
         '⚠️ Risparmio energetico attivo',
         'Il telefono può bloccare GPS e sensori: il test rischia di fermarsi. Disattivalo o metti in carica.',
+        'warning-power',
       );
     }
     if (p.lowPower === false) this.lowPowerWarned = false;

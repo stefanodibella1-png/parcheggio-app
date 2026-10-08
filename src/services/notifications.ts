@@ -185,10 +185,10 @@ export async function notifyNearbySpot(spot: {
 }
 
 /** Avviso tecnico importante durante il test (es. risparmio energetico). */
-export async function notifyWarning(title: string, body: string): Promise<void> {
+export async function notifyWarning(title: string, body: string, id = 'warning'): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
-      identifier: 'warning-power',
+      identifier: id,
       content: { title, body, data: { kind: 'warning', deliveredAt: Date.now() } },
       trigger: Platform.OS === 'android' ? { channelId: 'events' } : null,
     });

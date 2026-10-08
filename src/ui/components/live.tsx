@@ -227,17 +227,31 @@ export function Checklist({ items, onChanged }: { items: CheckItem[]; onChanged:
           {i.level !== 'ok' ? (
             <View style={{ marginLeft: 38, marginTop: 4 }}>
               <Label dim size={13}>{i.impact}</Label>
-              {i.action && i.actionLabel ? (
-                <Button
-                  small
-                  title={i.actionLabel}
-                  style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
-                  onPress={async () => {
-                    await i.action!();
-                    onChanged();
-                  }}
-                />
-              ) : null}
+              <View style={{ flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' }}>
+                {i.action && i.actionLabel ? (
+                  <Button
+                    small
+                    title={i.actionLabel}
+                    style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
+                    onPress={async () => {
+                      await i.action!();
+                      onChanged();
+                    }}
+                  />
+                ) : null}
+                {i.confirm ? (
+                  <Button
+                    small
+                    variant="ghost"
+                    title="✓ Fatto"
+                    style={{ marginTop: space.sm, alignSelf: 'flex-start' }}
+                    onPress={async () => {
+                      await i.confirm!();
+                      onChanged();
+                    }}
+                  />
+                ) : null}
+              </View>
             </View>
           ) : null}
         </View>

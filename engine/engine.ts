@@ -111,6 +111,8 @@ interface Memory {
   returnSeries: { t: number; d: number }[];
   /** fix scartato come salto, in attesa di conferma da un secondo fix coerente */
   returnJump: { t: number; d: number } | null;
+  /** semafori noti (chiave = lat,lon arrotondati) */
+  signals: Record<string, { latitude: number; longitude: number }>;
 
   drivePath?: { t: number; latitude: number; longitude: number }[];
   search?: { startT: number; distanceM: number; lastT: number; endedT: number | null } | null;
@@ -200,6 +202,7 @@ export class DetectionEngine {
       farSince: null,
       returnSeries: [],
       returnJump: null,
+      signals: {},
       drivePath: [],
       search: null,
       scores: { ...ZERO },
@@ -285,6 +288,13 @@ export class DetectionEngine {
       case 'carryOver':
         this.onCarryOver(input, now);
         break;
+      case 'mapFeatures':
+        if (!this.m.signals) this.m.signals = {};
+        for (const g of input.signals) {
+          const k = `${g.latitude.toFixed(5)},${g.longitude.toFixed(5)}`;
+          this.m.signals[k] = { latitude: g.latitude, longitude: g.longitude };
+        }
+        break;
       default:
         break;
     }
@@ -296,6 +306,17 @@ export class DetectionEngine {
       if (this.m.pendingSnapshots.length > 2000) this.m.pendingSnapshots.shift();
     }
     return this.out;
+  }
+
+  /** distanza dal semaforo noto più vicino (m), null se nessuno entro 200 m */
+  private nearestSignal(p: { latitude: number; longitude: number }): number | null {
+    let best: number | null = null;
+    for (const g of Object.values(this.m.signals ?? {})) {
+      if (Math.abs(g.latitude - p.latitude) > 0.002 || Math.abs(g.longitude - p.longitude) > 0.003) continue;
+      const d = distanceM(p, g);
+      if (best === null || d < best) best = d;
+    }
+    return best;
   }
 
   /** Riprende l'auto parcheggiata rilevata nel test precedente (solo a inizio test, senza sessione aperta). */
@@ -856,7 +877,17 @@ export class DetectionEngine {
       return;
     }
     if (m.state === 'POSSIBLE_PARKING' && stopMs >= cfg.MIN_PARKING_DURATION_S * 1000) {
-      this.openSession(c.now, `posizione stabile per ${fmtDur(stopMs)} dopo movimento in veicolo`);
+      // vicino a un semaforo una lunga attesa in auto non basta: serve la discesa a piedi o una sosta molto lunga
+      const sig = anchor ? this.nearestSignal(anchor) : null;
+      if (sig !== null && sig <= cfg.SIGNAL_RADIUS_M && stopMs < cfg.SIGNAL_MIN_PARKING_S * 1000) {
+        // probabile coda al semaforo: si aspetta (nessun evento)
+        return;
+      }
+      this.openSession(
+        c.now,
+        `posizione stabile per ${fmtDur(stopMs)} dopo movimento in veicolo` +
+          (sig !== null && sig <= cfg.SIGNAL_RADIUS_M ? ` (a ${Math.round(sig)} m da un semaforo)` : ''),
+      );
     }
   }
 
