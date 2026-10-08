@@ -53,7 +53,9 @@ export type EngineInput =
   | { kind: 'activity'; sample: ActivitySample }
   | { kind: 'motion'; sample: MotionFeatures }
   | { kind: 'tick'; t: number }
-  | { kind: 'geofence'; t: number; region: string; event: 'enter' | 'exit' };
+  | { kind: 'geofence'; t: number; region: string; event: 'enter' | 'exit' }
+  /** parcheggio rilevato automaticamente nel test precedente e ancora aperto (mai input manuale) */
+  | { kind: 'carryOver'; t: number; fromTestId: string; parkedT: number; spot: ParkingSpot; exitedOnFoot?: boolean; gpsLostAtPark?: boolean };
 
 export type EngineState =
   | 'UNKNOWN'

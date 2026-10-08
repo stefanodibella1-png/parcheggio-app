@@ -1,4 +1,5 @@
 // Esportazione completa e rigiocabile (sezione 14).
+import { inputTime } from '../../engine/replay.ts';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { replay, normalizeInputs } from '../../engine/replay.ts';
@@ -77,7 +78,7 @@ async function samplesCsv(testId: string): Promise<string> {
   let ci = 0;
   let state = 'UNKNOWN';
   let lastAct = '';
-  const t0 = inputs.length ? (inputs[0].kind === 'tick' || inputs[0].kind === 'geofence' ? inputs[0].t : inputs[0].sample.t) : 0;
+  const t0 = inputs.length ? inputTime(inputs[0]) : 0;
   const rows: unknown[][] = [[
     'tRelS', 'ora', 'lat', 'lon', 'accuracyM', 'speedKmh', 'heading', 'valido', 'stato', 'activity', 'distanzaDalParcheggioM',
   ]];

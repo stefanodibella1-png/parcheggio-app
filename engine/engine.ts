@@ -282,6 +282,9 @@ export class DetectionEngine {
       case 'motion':
         this.onMotion(input.sample);
         break;
+      case 'carryOver':
+        this.onCarryOver(input, now);
+        break;
       default:
         break;
     }
@@ -293,6 +296,33 @@ export class DetectionEngine {
       if (this.m.pendingSnapshots.length > 2000) this.m.pendingSnapshots.shift();
     }
     return this.out;
+  }
+
+  /** Riprende l'auto parcheggiata rilevata nel test precedente (solo a inizio test, senza sessione aperta). */
+  private onCarryOver(i: Extract<EngineInput, { kind: 'carryOver' }>, now: number): void {
+    const m = this.m;
+    if (m.session || !(m.state === 'UNKNOWN' || m.state === 'WALKING')) return;
+    const parkingId = `${m.idPrefix}-P${++m.parkingSeq}`;
+    const session: ParkingSession = {
+      parkingId,
+      startT: i.parkedT,
+      parkedT: i.parkedT,
+      endT: null,
+      durationS: null,
+      outcome: 'OPEN',
+      inferred: false,
+      spot: { ...i.spot },
+      releaseConfidence: null,
+      realDepartureT: null,
+      exitedOnFoot: i.exitedOnFoot,
+      gpsLostAtPark: i.gpsLostAtPark,
+    };
+    m.session = session;
+    m.sessions.push(session);
+    m.returnSeries = [];
+    this.transition('PARKED', `auto parcheggiata ripresa dal test precedente (${i.fromTestId}, ${fmtDur(now - i.parkedT)} fa)`, now, {
+      parkingId,
+    });
   }
 
   snapshot(): EngineSnapshot {

@@ -337,3 +337,20 @@ test('26. garage o parcheggio coperto: GPS perso entrando, poi a piedi → parch
   assert.ok(!has(r.events, 'RETURN_PREDICTED'), r.log);
   assert.notEqual(sess.outcome, 'OPEN', r.log);
 });
+
+test('27. nuovo test con l\'auto parcheggiata nel test precedente → riparte da PARKED e rileva la ripartenza', () => {
+  const first = new Scenario().drive(300).stopInCar(150).walk(300, 0).stand(60);
+  const r1 = replay(first.inputs);
+  const open = r1.sessions.find((x) => x.outcome === 'OPEN')!;
+  assert.ok(open);
+  const s2 = new Scenario({ latitude: first.lat, longitude: first.lon }, first.t + 600_000).stand(5);
+  const inputs: EngineInput[] = [
+    { kind: 'carryOver', t: s2.t, fromTestId: 'T1', parkedT: open.parkedT!, spot: open.spot, exitedOnFoot: open.exitedOnFoot },
+  ];
+  s2.stand(60).walk(300, 180).stopInCar(30).drive(120, 35, 90);
+  const r2 = replay([...s2.inputs, ...inputs]);
+  const log = trace(r2.events, r2.t0);
+  assert.ok(has(r2.events, 'PARKED'), log);
+  assert.equal(releases(r2.events).length, 1, log);
+  assert.equal(releases(r2.events)[0].type, 'PARKING_RELEASED', log);
+});

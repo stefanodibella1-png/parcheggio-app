@@ -247,8 +247,33 @@ class Host {
     } catch (e) {
       this.state.error = `Posizione non avviata: ${String(e)}`;
     }
+    await this.carryOverParking(testId, now);
     this.emitChange();
     return testId;
+  }
+
+  /** Se il test precedente è finito con l'auto parcheggiata, il nuovo test riparte da lì. */
+  private async carryOverParking(testId: string, now: number): Promise<void> {
+    try {
+      const prev = (await db.listTests()).find((t) => t.id !== testId && t.stoppedAt !== null);
+      if (!prev) return;
+      const open = (await db.getSessions(prev.id))
+        .filter((s) => s.outcome === 'OPEN' && s.parkedT !== null)
+        .sort((a, b) => (b.parkedT ?? 0) - (a.parkedT ?? 0))[0];
+      if (!open || now - (open.parkedT ?? 0) > 48 * 3600_000) return;
+      this.push({
+        kind: 'carryOver',
+        t: now,
+        fromTestId: prev.id,
+        parkedT: open.parkedT as number,
+        spot: open.spot,
+        exitedOnFoot: open.exitedOnFoot,
+        gpsLostAtPark: open.gpsLostAtPark,
+      });
+      this.pump(now);
+    } catch {
+      // nessun parcheggio da riprendere
+    }
   }
 
   async stopTest(): Promise<string | null> {
