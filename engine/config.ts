@@ -107,6 +107,18 @@ export interface DetectionConfig {
   /** sopra questa velocità media nell'ultimo minuto la ricerca è finita (km/h) */
   SEARCH_EXIT_SPEED: number;
 
+  // --- community (usate dall'app, MAI dal motore) ---
+  /** raggio entro cui chi cerca riceve i posti (m) */
+  COMMUNITY_RADIUS_M: number;
+  /** ogni quanto chi cerca controlla i posti vicini (s) */
+  COMMUNITY_POLL_S: number;
+  /** dopo la fine della ricerca si continua ad ascoltare per (s) */
+  COMMUNITY_LINGER_S: number;
+  /** validità di un posto "si libera tra…" oltre l'orario previsto (s) */
+  COMMUNITY_SOON_TTL_S: number;
+  /** validità di un posto appena liberato (s) */
+  COMMUNITY_FREED_TTL_S: number;
+
   // --- pesi degli score ---
   W_VEHICLE: { speed: number; activity: number; motion: number };
   W_WALKING: { speed: number; activity: number; steps: number };
@@ -199,6 +211,12 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   SEARCH_REVISIT_M: 25,
   SEARCH_MIN_CONFIDENCE: 70,
   SEARCH_EXIT_SPEED: 40,
+
+  COMMUNITY_RADIUS_M: 800,
+  COMMUNITY_POLL_S: 15,
+  COMMUNITY_LINGER_S: 300,
+  COMMUNITY_SOON_TTL_S: 300,
+  COMMUNITY_FREED_TTL_S: 300,
 
   W_VEHICLE: { speed: 0.5, activity: 0.35, motion: 0.15 },
   W_WALKING: { speed: 0.3, activity: 0.45, steps: 0.25 },

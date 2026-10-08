@@ -4,7 +4,7 @@ import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
 import { updatePending } from '../../services/updates.ts';
 import { Button, Card, Label, SectionTitle, Title } from '../components/basics.tsx';
-import { CarCard, Checklist, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
+import { CarCard, Checklist, CommunityCard, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
 import { SCENARIOS } from '../scenarios.ts';
 import { fmtDuration } from '../format.ts';
 import { space, usePalette } from '../theme.ts';
@@ -122,6 +122,9 @@ export function TestScreen({ nav }: { nav: Nav }) {
                 <CarCard session={s.session} distanceM={s.snapshot?.distanceFromParkingM ?? null} now={now} />
               </View>
             ) : null}
+            <View style={{ marginTop: space.md }}>
+              <CommunityCard community={s.community} now={now} />
+            </View>
             {s.events.length > 0 ? (
               <>
                 <SectionTitle>Ultimi eventi</SectionTitle>

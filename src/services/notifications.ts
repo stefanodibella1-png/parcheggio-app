@@ -158,3 +158,28 @@ export async function updateReturnNotification(testId: string, session: ParkingS
     // ignorato
   }
 }
+
+/** Avviso a chi cerca: un posto vicino si sta liberando (o si è appena liberato). */
+export async function notifyNearbySpot(spot: {
+  id: string;
+  kind: 'FREED' | 'SOON';
+  address: string | null;
+  freeAt: number;
+  distanceM: number;
+}, now: number): Promise<void> {
+  const where = spot.address ? `in ${spot.address}` : 'vicino a te';
+  const when = spot.kind === 'FREED' ? 'appena liberato' : `si libera ${inMinutes(Math.max(0, (spot.freeAt - now) / 1000))}`;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `spot-${spot.id}`,
+      content: {
+        title: spot.kind === 'FREED' ? '🅿️ Posto libero vicino a te' : '🅿️ Posto che si libera vicino a te',
+        body: `Posto ${where}: ${when} · a ${spot.distanceM} m`,
+        data: { kind: 'community-spot', spotId: spot.id, deliveredAt: Date.now() },
+      },
+      trigger: Platform.OS === 'android' ? { channelId: 'events' } : null,
+    });
+  } catch {
+    // ignorato
+  }
+}

@@ -35,6 +35,7 @@ import { deviceInfo } from '../services/deviceInfo.ts';
 import { readiness, statusMap } from '../services/permissions.ts';
 import { applyPendingUpdate } from '../services/updates.ts';
 import { STATE_TEXT } from '../ui/theme.ts';
+import { CommunityBridge, type CommunityState } from '../community/bridge.ts';
 
 export interface SensorRates {
   location: number;
@@ -60,6 +61,7 @@ export interface HostState {
   config: DetectionConfig;
   error: string | null;
   lastStopped: { testId: string; warnings: QualityWarning[] } | null;
+  community: CommunityState;
 }
 
 type Listener = (s: HostState) => void;
@@ -82,6 +84,13 @@ class Host {
   private lastPersistT = 0;
   /** ultimo testo/ora della notifica di ritorno (per aggiornarla senza spam) */
   private returnNote: { key: string; t: number } | null = null;
+  private community = new CommunityBridge(
+    () => this.engine?.cfg ?? this.state.config,
+    () => {
+      this.state.community = { ...this.community.state };
+      this.emitChange();
+    },
+  );
   private notifyQueued = false;
   private counts = { location: [] as number[], activity: [] as number[], motion: [] as number[] };
   private geocodeAttempts = new Map<string, number>();
@@ -102,6 +111,7 @@ class Host {
     config: DEFAULT_CONFIG,
     error: null,
     lastStopped: null,
+    community: { configured: false, listening: false, nearby: [], lastSyncT: null, shared: null, error: null },
   };
 
   // ---- ciclo di vita -------------------------------------------------------------
@@ -114,6 +124,8 @@ class Host {
   private async init(): Promise<void> {
     try {
       await setupNotifications();
+      await this.community.init().catch(() => {});
+      this.state.community = { ...this.community.state };
       const overrides = await db.kvGet(CONFIG_KEY);
       this.state.config = makeConfig(overrides ? JSON.parse(overrides) : {});
       const active = await db.getActiveTest();
@@ -355,6 +367,8 @@ class Host {
     this.push({ kind: 'tick', t: now });
     this.pump(now);
     this.updateRates(now);
+    const track = this.state.track;
+    this.community.tick(this.state.snapshot, track.length ? track[track.length - 1] : null, now);
   }
 
   private process(input: EngineInput): void {
@@ -397,6 +411,7 @@ class Host {
     if (key === this.returnNote.key || now - this.returnNote.t < 15_000) return;
     this.returnNote = { key, t: now };
     void updateReturnNotification(testId, this.state.session, ri);
+    void this.community.onReturnUpdate(this.state.session, ri, now);
   }
 
   // ---- effetti degli eventi --------------------------------------------------------------
@@ -416,7 +431,9 @@ class Host {
         await stopGeofences().catch(() => {});
         await this.geocode(session);
       }
-      await notifyEvent(e, session ?? null, testId, this.engine.snapshot().returnInfo);
+      const ri = this.engine.snapshot().returnInfo;
+      await notifyEvent(e, session ?? null, testId, ri);
+      void this.community.onEvent(e, session ?? null, ri, Date.now());
     }
     const last = events[events.length - 1];
     await this.applySideEffectsForState(last.to);

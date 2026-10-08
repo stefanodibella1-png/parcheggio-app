@@ -252,3 +252,49 @@ export function SensorLine({ rates, now }: { rates: HostState['rates']; now: num
     </Label>
   );
 }
+
+/** Community: posti vicini quando stai cercando, e il tuo posto condiviso. */
+export function CommunityCard({ community, now }: { community: HostState['community']; now: number }) {
+  const c = usePalette();
+  if (!community.configured) {
+    return (
+      <Card>
+        <Label size={13} dim bold>COMMUNITY</Label>
+        <Label dim size={13} style={{ marginTop: 4 }}>
+          Server della community non ancora collegato: le previsioni restano su questo telefono.
+        </Label>
+      </Card>
+    );
+  }
+  const mins = (t: number) => Math.max(0, Math.round((t - now) / 60000));
+  return (
+    <Card accent={FAMILY_COLORS.parking}>
+      <Label size={13} dim bold>COMMUNITY</Label>
+      {community.shared ? (
+        <Label style={{ marginTop: 4 }}>
+          📣 Il tuo posto è condiviso: {community.shared.kind === 'FREED' ? 'libero' : `si libera tra ~${mins(community.shared.freeAt)} min`}
+        </Label>
+      ) : null}
+      {community.listening ? (
+        <>
+          <Label style={{ marginTop: 4 }}>🔎 Stai cercando parcheggio: ti avviso dei posti vicini</Label>
+          {community.nearby.length === 0 ? (
+            <Label dim size={13} style={{ marginTop: 4 }}>Nessun posto in arrivo vicino a te{community.lastSyncT ? ` · controllato ${ago(community.lastSyncT, now)}` : ''}</Label>
+          ) : (
+            community.nearby.slice(0, 5).map((s) => (
+              <Label key={s.id} size={14} style={{ marginTop: 4 }}>
+                🅿️ {s.address ?? 'Posto'} · {s.kind === 'FREED' ? 'libero' : `tra ~${mins(s.freeAt)} min`} · {s.distanceM} m
+              </Label>
+            ))
+          )}
+        </>
+      ) : null}
+      {!community.shared && !community.listening ? (
+        <Label dim size={13} style={{ marginTop: 4 }}>
+          Automatica: quando torni all'auto avvisa chi cerca vicino; quando cerchi parcheggio ricevi i posti che si liberano.
+        </Label>
+      ) : null}
+      {community.error ? <Label size={13} color={c.warn} style={{ marginTop: 4 }}>{community.error}</Label> : null}
+    </Card>
+  );
+}

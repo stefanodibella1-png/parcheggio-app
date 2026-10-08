@@ -1,0 +1,22 @@
+rules_version = '2';
+// PARCHEGGIO — regole della community (prototipo, senza account).
+// Si possono leggere e scrivere SOLO documenti "spots" ben formati:
+// coordinate, cella geohash, tipo, orari, indirizzo. Niente altro.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /spots/{id} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['id', 'kind', 'latitude', 'longitude', 'geohash6', 'address',
+          'quality', 'confidence', 'freeAt', 'createdAt', 'expiresAt', 'deviceId'])
+        && request.resource.data.kind in ['FREED', 'SOON']
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.geohash6 is string
+        && request.resource.data.geohash6.size() == 6
+        && request.resource.data.expiresAt is number
+        && request.resource.data.expiresAt < request.resource.data.createdAt + 3600000;
+    }
+  }
+}
