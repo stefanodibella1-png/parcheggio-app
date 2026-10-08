@@ -1,4 +1,5 @@
 name: Firebase (regole + configurazione + aggiornamento app)
+# attivazione: secret FIREBASE_SERVICE_ACCOUNT aggiunto l'08/10
 
 # Parte da solo ogni 15 minuti finché la community non è configurata:
 # appena il secret FIREBASE_SERVICE_ACCOUNT esiste, pubblica le regole,
