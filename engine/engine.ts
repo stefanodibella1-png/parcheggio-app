@@ -109,6 +109,8 @@ interface Memory {
   farSince?: number | null;
 
   returnSeries: { t: number; d: number }[];
+  /** fix scartato come salto, in attesa di conferma da un secondo fix coerente */
+  returnJump: { t: number; d: number } | null;
 
   drivePath?: { t: number; latitude: number; longitude: number }[];
   search?: { startT: number; distanceM: number; lastT: number; endedT: number | null } | null;
@@ -197,6 +199,7 @@ export class DetectionEngine {
       awayVehicleLogged: false,
       farSince: null,
       returnSeries: [],
+      returnJump: null,
       drivePath: [],
       search: null,
       scores: { ...ZERO },
@@ -397,8 +400,22 @@ export class DetectionEngine {
     }
 
     // serie per la previsione del ritorno
-    if (m.session && (m.state === 'PARKED_USER_AWAY' || m.state === 'RETURN_PREDICTED')) {
-      m.returnSeries.push({ t: s.t, d: distanceM(m.session.spot.pointFinal, s) });
+    if (valid && m.session && (m.state === 'PARKED_USER_AWAY' || m.state === 'RETURN_PREDICTED')) {
+      const d = distanceM(m.session.spot.pointFinal, s);
+      const prev = m.returnSeries[m.returnSeries.length - 1];
+      // salto GPS (es. fix di rete a centinaia di metri): non è un movimento a piedi
+      const jump =
+        prev && s.t > prev.t && Math.abs(d - prev.d) - s.accuracy > cfg.RETURN_MAX_WALK_SPEED_MS * ((s.t - prev.t) / 1000);
+      if (!jump) {
+        m.returnSeries.push({ t: s.t, d });
+        m.returnJump = null;
+      } else if (m.returnJump && Math.abs(m.returnJump.d - d) <= 30 && s.t - m.returnJump.t >= 30_000) {
+        // due fix coerenti tra loro per almeno 30 s: la posizione è davvero cambiata, si riparte da qui
+        m.returnSeries = [m.returnJump, { t: s.t, d }];
+        m.returnJump = null;
+      } else if (!m.returnJump || Math.abs(m.returnJump.d - d) > 30) {
+        m.returnJump = { t: s.t, d };
+      }
     }
 
     // partenza in corso
@@ -767,6 +784,7 @@ export class DetectionEngine {
     // a piedi lontano dal punto di sosta → parcheggio (segnale forte)
     if (c.walkingConfirmed && moved > 15) {
       this.openSession(c.now, `sceso dal veicolo e allontanato a piedi (${Math.round(moved)} m) dopo ${fmtDur(stopMs)} di sosta`);
+      if (m.session) m.session.exitedOnFoot = true;
       return;
     }
     // ripartito: semaforo / coda / fermata breve
@@ -1020,7 +1038,8 @@ export class DetectionEngine {
         const durTxt = s.parkedT !== null ? `PARKED per ${fmtDur(dep.startT - (s.parkedT ?? dep.startT))}; ` : '';
         this.transition(
           'PARKING_RELEASED',
-          `${durTxt}${checks.filter((x) => x.startsWith('✓')).map((x) => x.slice(2)).join('; ')}; confidence ${score}`,
+          `${durTxt}${checks.filter((x) => x.startsWith('✓')).map((x) => x.slice(2)).join('; ')}; ` +
+            `${s.exitedOnFoot || s.inferred ? '' : 'nessuna discesa a piedi (possibile coda o attesa in auto, non condiviso); '}confidence ${score}`,
           c.now,
           { parkingId: s.parkingId, distanceM: Math.round(d), checks, eventType: s.inferred ? 'PARKING_RELEASED_INFERRED' : 'PARKING_RELEASED' },
         );
@@ -1384,6 +1403,7 @@ export class DetectionEngine {
     extra: { parkingId?: string; distanceM?: number | null; checks?: string[]; eventType?: EventType } = {},
   ): void {
     const from = this.m.state;
+    if (to === 'PARKED_USER_AWAY' && this.m.session) this.m.session.exitedOnFoot = true;
     this.m.state = to;
     this.m.stateSinceT = now;
     this.emit(extra.eventType ?? to, from, to, reason, now, extra);

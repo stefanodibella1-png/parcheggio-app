@@ -92,6 +92,8 @@ export interface DetectionConfig {
   RETURN_WALK_SPEED_MS: number;
   /** tempo tipico tra arrivo all'auto e partenza (s), per "posto libero tra…" */
   RETURN_DEPART_DELAY_S: number;
+  /** velocità massima a piedi plausibile: fix più "veloci" verso o via dall'auto sono salti GPS (m/s) */
+  RETURN_MAX_WALK_SPEED_MS: number;
 
   // --- ricerca del parcheggio (sperimentale) ---
   /** finestra di guida analizzata (s) */
@@ -203,6 +205,7 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_LONG_APPROACH_M: 80,
   RETURN_WALK_SPEED_MS: 1.2,
   RETURN_DEPART_DELAY_S: 60,
+  RETURN_MAX_WALK_SPEED_MS: 4,
 
   SEARCH_WINDOW_S: 180,
   SEARCH_MIN_SPEED: 5,

@@ -281,3 +281,35 @@ test('22. a piedi in giro senza tornare all\'auto → nessuna previsione di rito
   assert.ok(!has(r.events, 'RETURN_PREDICTED'), r.log);
   assert.equal(releases(r.events).length, 0, r.log);
 });
+
+test('23. fermo in auto 2 min e poi riparte (coda, attesa) → rilascio segnato "senza discesa", da non condividere', () => {
+  const s = new Scenario().drive(300).stopInCar(150).drive(120);
+  const r = run(s);
+  const rel = releases(r.events);
+  assert.equal(rel.length, 1, r.log);
+  assert.match(rel[0].reason, /nessuna discesa a piedi/);
+  assert.ok(!r.sessions[0].exitedOnFoot, r.log);
+});
+
+test('24. sceso e allontanato a piedi → sessione con discesa a piedi', () => {
+  const s = new Scenario().drive(300).stopInCar(150).walk(300, 0).stand(60).silence(1800).walk(300, 180).stopInCar(30).drive(120, 35, 90);
+  const r = run(s);
+  assert.ok(r.sessions[0].exitedOnFoot, r.log);
+  assert.doesNotMatch(releases(r.events)[0].reason, /nessuna discesa/);
+});
+
+test('25. salto GPS di centinaia di metri durante il ritorno → la previsione non viene annullata (test reale 08/10)', () => {
+  const s = new Scenario().drive(300).stopInCar(150).walk(300, 0).stand(60).silence(1800);
+  s.walk(150, 180);
+  const t = s.t + 1000;
+  // fix sbagliato a ~650 m dall'auto con precisione dichiarata buona
+  s.inputs.push({ kind: 'location', sample: { t, latitude: s.lat + 0.006, longitude: s.lon, accuracy: 27, altitude: null, speed: 0, heading: null } as never });
+  s.t = t + 1000;
+  s.walk(150, 180).stopInCar(30).drive(120, 35, 90);
+  const r = run(s);
+  const pred = r.events.findIndex((e) => e.type === 'RETURN_PREDICTED');
+  assert.ok(pred >= 0, r.log);
+  const cancelled = r.events.slice(pred).some((e) => e.type === 'PARKED_USER_AWAY' && e.from === 'RETURN_PREDICTED');
+  assert.ok(!cancelled, r.log);
+  assert.equal(releases(r.events).length, 1, r.log);
+});

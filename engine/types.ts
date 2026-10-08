@@ -177,6 +177,8 @@ export interface ParkingSession {
   releaseConfidence: number | null;
   /** ricavato a posteriori dalla traccia (sezione 11) */
   realDepartureT: number | null;
+  /** l'utente è sceso e si è allontanato a piedi (esclude code e attese in auto) */
+  exitedOnFoot?: boolean;
   /** ricerca del posto prima della sosta (sperimentale) */
   searchStartT?: number | null;
   searchDurationS?: number | null;

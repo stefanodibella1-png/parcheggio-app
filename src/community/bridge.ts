@@ -45,6 +45,8 @@ export class CommunityBridge {
   async onEvent(e: DetectionEvent, session: ParkingSession | null, ri: ReturnInfo | null, now: number): Promise<void> {
     if (!this.state.configured || !session) return;
     const id = session.parkingId;
+    // solo posti veri: l'utente è sceso dall'auto (non code o attese in doppia fila)
+    if (!session.exitedOnFoot && !session.inferred) return;
     switch (e.type) {
       case 'RETURN_PREDICTED':
         await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now);
