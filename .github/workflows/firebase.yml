@@ -71,31 +71,12 @@ jobs:
               || echo "::warning title=Firestore::non riesco a creare il database: crealo dalla console"
           fi
 
-      - name: Pubblica le regole
+      - name: Regole e configurazione (API Firebase)
         if: steps.gate.outputs.go == 'yes'
         run: |
-          set -o pipefail
-          firebase deploy --only firestore:rules --project "$PROJECT_ID" --non-interactive 2>&1 | tee rules.log
-          echo "::notice title=Firestore regole::pubblicate"
-
-      - name: Configurazione app web
-        if: steps.gate.outputs.go == 'yes'
-        run: |
-          set -o pipefail
-          list() { firebase apps:list WEB --project "$PROJECT_ID" --json 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const r=JSON.parse(s).result||[];console.log(r[0]?r[0].appId:'')}catch{console.log('')}})"; }
-          APP=$(list)
-          if [ -z "$APP" ]; then firebase apps:create WEB parcheggio --project "$PROJECT_ID" --non-interactive 2>&1 | tee -a rules.log || true; APP=$(list); fi
-          if [ -z "$APP" ]; then echo "::error title=Firebase app::nessuna app web: registrala dalla console (icona </>)"; exit 1; fi
-          firebase apps:sdkconfig WEB "$APP" --project "$PROJECT_ID" --json > sdk.json
-          node -e "
-            const r=JSON.parse(require('fs').readFileSync('sdk.json','utf8')).result;
-            const c=r.sdkConfig||JSON.parse(r.fileContents.match(/\{[\s\S]*\}/)[0]);
-            const cfg={apiKey:c.apiKey,authDomain:c.authDomain,projectId:c.projectId,storageBucket:c.storageBucket,messagingSenderId:c.messagingSenderId,appId:c.appId};
-            const head='// Configurazione Firebase del progetto PARCHEGGIO (Firestore).\n// Scritta in automatico da .github/workflows/firebase.yml. Valori pubblici:\n// la protezione dei dati è affidata alle regole in firestore.rules.\n';
-            const body='export const FIREBASE_CONFIG: {\n  apiKey: string;\n  authDomain: string;\n  projectId: string;\n  storageBucket?: string;\n  messagingSenderId?: string;\n  appId: string;\n} | null = '+JSON.stringify(cfg,null,2)+';\n';
-            require('fs').writeFileSync('src/community/firebaseConfig.ts',head+body);
-            console.log('::notice title=FIREBASE_CONFIG::'+JSON.stringify(cfg));
-          "
+          mkdir -p "$RUNNER_TEMP/fb" && (cd "$RUNNER_TEMP/fb" && npm init -y >/dev/null && npm install google-auth-library@9 --no-audit --no-fund >/dev/null)
+          cp tools/ci/firebase-setup.mjs "$RUNNER_TEMP/fb/setup.mjs"
+          NODE_PATH="$RUNNER_TEMP/fb/node_modules" node "$RUNNER_TEMP/fb/setup.mjs"
 
       - name: Salva la configurazione nel repository
         if: steps.gate.outputs.go == 'yes'
