@@ -1,7 +1,6 @@
 // Configurazione Firebase del progetto PARCHEGGIO (Firestore).
-// Questi valori non sono segreti: identificano il progetto. La protezione
-// dei dati è affidata alle regole in firestore.rules.
-// Finché è null, la community resta disattivata e l'app funziona da sola.
+// Scritta in automatico da .github/workflows/firebase.yml. Valori pubblici:
+// la protezione dei dati è affidata alle regole in firestore.rules.
 export const FIREBASE_CONFIG: {
   apiKey: string;
   authDomain: string;
@@ -9,4 +8,11 @@ export const FIREBASE_CONFIG: {
   storageBucket?: string;
   messagingSenderId?: string;
   appId: string;
-} | null = null;
+} | null = {
+  "apiKey": "AIzaSyCKwKN_yJmcNThscOTd0_75HgtTgO4E2Yw",
+  "authDomain": "parcheggio-50d37.firebaseapp.com",
+  "projectId": "parcheggio-50d37",
+  "storageBucket": "parcheggio-50d37.firebasestorage.app",
+  "messagingSenderId": "561575865846",
+  "appId": "1:561575865846:web:7dea30cd794059f2562bd7"
+};
