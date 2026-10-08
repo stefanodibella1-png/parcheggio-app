@@ -111,6 +111,15 @@ export function analyzeTestQuality(q: TestQualityInput): QualityWarning[] {
       message: `Nessuna posizione per ${Math.round(maxGap / 60000)} min (dal minuto ${Math.round((gapAt - t0) / 60000)}): probabile sospensione dell'app in background.`,
     });
   }
+  // riconoscimento attività assente (risparmio energetico, servizi Google sospesi)
+  if (t1 - t0 >= 10 * 60_000 && !inputs.some((i) => i.kind === 'activity')) {
+    w.push({
+      code: 'NO_ACTIVITY',
+      severity: 'warning',
+      message:
+        "Nessun dato dal riconoscimento attività (auto/a piedi) per tutto il test: probabile risparmio energetico attivo o servizi Google sospesi. Senza questo dato auto e camminata si distinguono solo dal GPS.",
+    });
+  }
   // activity duplicate / fuori ordine
   if (stats.outOfOrder > 0 || stats.duplicates > 0) {
     w.push({

@@ -10,7 +10,7 @@ import { motionAvailable } from '../sensors/motion.ts';
 export type Level = 'ok' | 'warn' | 'bad';
 
 export interface CheckItem {
-  key: 'locationFg' | 'locationBg' | 'precise' | 'motion' | 'notifications' | 'gps' | 'battery' | 'accelerometer';
+  key: 'locationFg' | 'locationBg' | 'precise' | 'motion' | 'notifications' | 'gps' | 'battery' | 'power' | 'accelerometer';
   label: string;
   level: Level;
   detail: string;
@@ -175,7 +175,36 @@ export async function readiness(): Promise<CheckItem[]> {
       actionLabel: optimized === false ? null : 'Apri impostazioni batteria',
     });
   }
+  const power = await powerState();
+  items.push({
+    key: 'power',
+    label: 'Risparmio energetico',
+    level: power.lowPower ? 'bad' : 'ok',
+    detail: `${power.lowPower ? 'ATTIVO' : 'Spento'}${power.level !== null ? ` · batteria ${power.level}%` : ''}`,
+    impact: 'Con il risparmio energetico il telefono blocca GPS e sensori in background: il test si ferma.',
+    action:
+      power.lowPower && Platform.OS === 'android'
+        ? async () => {
+            await IntentLauncher.startActivityAsync('android.settings.BATTERY_SAVER_SETTINGS');
+          }
+        : null,
+    actionLabel: power.lowPower && Platform.OS === 'android' ? 'Disattiva risparmio energetico' : null,
+  });
   return items;
+}
+
+/** Livello batteria e risparmio energetico (null se non leggibile). */
+export async function powerState(): Promise<{ level: number | null; lowPower: boolean | null; charging: boolean | null }> {
+  try {
+    const p = await Battery.getPowerStateAsync();
+    return {
+      level: p.batteryLevel >= 0 ? Math.round(p.batteryLevel * 100) : null,
+      lowPower: p.lowPowerMode,
+      charging: p.batteryState === Battery.BatteryState.CHARGING || p.batteryState === Battery.BatteryState.FULL,
+    };
+  } catch {
+    return { level: null, lowPower: null, charging: null };
+  }
 }
 
 export function statusMap(items: CheckItem[]): Record<string, string> {

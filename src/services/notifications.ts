@@ -183,3 +183,16 @@ export async function notifyNearbySpot(spot: {
     // ignorato
   }
 }
+
+/** Avviso tecnico importante durante il test (es. risparmio energetico). */
+export async function notifyWarning(title: string, body: string): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'warning-power',
+      content: { title, body, data: { kind: 'warning', deliveredAt: Date.now() } },
+      trigger: Platform.OS === 'android' ? { channelId: 'events' } : null,
+    });
+  } catch {
+    // ignorato
+  }
+}

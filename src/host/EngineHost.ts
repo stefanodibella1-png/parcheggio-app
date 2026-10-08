@@ -29,10 +29,10 @@ import {
 } from '../sensors/location.ts';
 import { activityHistory, bufferedActivities, startActivity, stopActivity } from '../sensors/activity.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
-import { inMinutes, notifyEvent, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
+import { inMinutes, notifyEvent, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
 import { deviceInfo } from '../services/deviceInfo.ts';
-import { readiness, statusMap } from '../services/permissions.ts';
+import { powerState, readiness, statusMap } from '../services/permissions.ts';
 import { applyPendingUpdate } from '../services/updates.ts';
 import { STATE_TEXT } from '../ui/theme.ts';
 import { CommunityBridge, type CommunityState } from '../community/bridge.ts';
@@ -84,6 +84,9 @@ class Host {
   private lastPersistT = 0;
   /** ultimo testo/ora della notifica di ritorno (per aggiornarla senza spam) */
   private returnNote: { key: string; t: number } | null = null;
+  /** ultimo controllo di batteria / risparmio energetico durante il test */
+  private lastPowerT = 0;
+  private lowPowerWarned = false;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -310,6 +313,10 @@ class Host {
       if (this.state.track.length > MAX_TRACK) this.state.track.shift();
       this.push({ kind: 'location', sample: s });
     }
+    if (now - this.lastPowerT > 300_000) {
+      this.lastPowerT = now;
+      void this.logPower(now);
+    }
     this.pump(now);
   }
 
@@ -326,6 +333,31 @@ class Host {
     this.counts.motion.push(Date.now());
     this.state.rates.lastMotionT = f.t;
     this.push({ kind: 'motion', sample: f });
+  }
+
+  /** Registra batteria e risparmio energetico nel test (ogni 5 min): spiega i buchi nei dati. */
+  private async logPower(now: number): Promise<void> {
+    const testId = this.state.testId;
+    if (!testId) return;
+    const p = await powerState();
+    const label = `${p.lowPower ? 'ATTIVO' : 'spento'}${p.level !== null ? ` · batteria ${p.level}%` : ''}${p.charging ? ' (in carica)' : ''}`;
+    try {
+      const t = await db.getTest(testId);
+      if (t) {
+        const meta = { ...t.meta, permissions: [...(t.meta.permissions ?? []), { t: now, status: { power: label } }] };
+        await db.updateTest(testId, { meta });
+      }
+    } catch {
+      // non essenziale
+    }
+    if (p.lowPower && !this.lowPowerWarned) {
+      this.lowPowerWarned = true;
+      await notifyWarning(
+        '⚠️ Risparmio energetico attivo',
+        'Il telefono può bloccare GPS e sensori: il test rischia di fermarsi. Disattivalo o metti in carica.',
+      );
+    }
+    if (p.lowPower === false) this.lowPowerWarned = false;
   }
 
   async onGeofence(region: string, event: 'enter' | 'exit'): Promise<void> {
