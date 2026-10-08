@@ -78,6 +78,10 @@ jobs:
           cp tools/ci/firebase-setup.mjs "$RUNNER_TEMP/fb/setup.mjs"
           NODE_PATH="$RUNNER_TEMP/fb/node_modules" node "$RUNNER_TEMP/fb/setup.mjs"
 
+      - name: Prova della community (come l'app)
+        if: steps.gate.outputs.go == 'yes'
+        run: node tools/ci/community-smoke.mjs
+
       - name: Salva la configurazione nel repository
         if: steps.gate.outputs.go == 'yes'
         id: commit
