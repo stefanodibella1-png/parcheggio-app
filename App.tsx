@@ -3,7 +3,7 @@ import { AppState, BackHandler, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { host } from './src/host/EngineHost.ts';
-import { checkForUpdates } from './src/services/updates.ts';
+import { updateAvailable } from './src/services/updates.ts';
 import { usePalette } from './src/ui/theme.ts';
 import type { Nav, Route, TabName } from './src/ui/nav.ts';
 import { TestScreen } from './src/ui/screens/TestScreen.tsx';
@@ -39,12 +39,12 @@ function Root() {
   useEffect(() => {
     void host.ensureInit().then(() => {
       void host.retryGeocoding();
-      void checkForUpdates(() => host.state.active);
+      void updateAvailable();
     });
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'active') {
         void host.onForeground();
-        void checkForUpdates(() => host.state.active);
+        void updateAvailable();
       } else if (st === 'background') {
         void host.onBackground();
       }

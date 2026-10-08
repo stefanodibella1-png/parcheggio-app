@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, AppState, BackHandler, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
-import { currentUpdateLabel, updateNow, updatePending } from '../../services/updates.ts';
+import { shortVersion, updateAvailable, updateNow, updatePending } from '../../services/updates.ts';
 import { Button, Card, Label, SectionTitle, Title } from '../components/basics.tsx';
 import { CarCard, Checklist, CommunityCard, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
 import { SCENARIOS } from '../scenarios.ts';
@@ -17,7 +17,8 @@ export function TestScreen({ nav }: { nav: Nav }) {
   const [items, setItems] = useState<CheckItem[]>([]);
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [updMsg, setUpdMsg] = useState<string | null>(null);
+  const [updAvail, setUpdAvail] = useState(false);
+  const [updBusy, setUpdBusy] = useState(false);
 
   const refresh = useCallback(() => {
     readiness().then(setItems).catch(() => setItems([]));
@@ -32,6 +33,15 @@ export function TestScreen({ nav }: { nav: Nav }) {
     });
     return () => sub.remove();
   }, [refresh]);
+  // aggiornamenti: controllo silenzioso, il pulsante compare solo se ce n'è uno
+  useEffect(() => {
+    const check = () => void updateAvailable().then(setUpdAvail);
+    check();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') check();
+    });
+    return () => sub.remove();
+  }, []);
 
   const blocking = items.filter((i) => i.level === 'bad' && (i.key === 'locationFg' || i.key === 'gps'));
   const missing = items.filter((i) => i.level !== 'ok');
@@ -79,28 +89,45 @@ export function TestScreen({ nav }: { nav: Nav }) {
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 140 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Title>PARCHEGGIO</Title>
-          {updatePending() ? <Label size={12} color={c.ok}>aggiornamento pronto</Label> : null}
-        </View>
-        {s.active && updatePending() ? (
-          <Card style={{ marginTop: space.md, borderColor: c.ok }}>
-            <Label color={c.ok}>Aggiornamento scaricato: si installa da solo quando premi FERMA TEST.</Label>
-          </Card>
-        ) : null}
-        {!s.active ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm }}>
-            <Label dim size={12}>Versione {currentUpdateLabel()}</Label>
+          {Platform.OS === 'android' ? (
             <Button
               small
               variant="ghost"
-              title={updMsg ?? 'Aggiorna app ora'}
-              onPress={async () => {
-                setUpdMsg('Controllo…');
-                const r = await updateNow();
-                setUpdMsg(r === 'none' ? 'Già aggiornata ✓' : r === 'error' ? 'Rete assente, riprova' : r === 'disabled' ? 'Non disponibile' : 'Riavvio…');
+              title="Esci ✕"
+              onPress={() => {
+                if (s.active) {
+                  Alert.alert('Uscire dall\'app?', 'Il test continua a funzionare in background.', [
+                    { text: 'Annulla', style: 'cancel' },
+                    { text: 'Esci', onPress: () => BackHandler.exitApp() },
+                  ]);
+                } else BackHandler.exitApp();
               }}
             />
-          </View>
+          ) : null}
+        </View>
+        {s.active && (updAvail || updatePending()) ? (
+          <Card style={{ marginTop: space.md, borderColor: c.ok }}>
+            <Label color={c.ok}>Aggiornamento pronto: si installa da solo quando premi FERMA TEST.</Label>
+          </Card>
         ) : null}
+        {!s.active && (updAvail || updatePending()) ? (
+          <Button
+            title={updBusy ? 'Installazione…' : '⬇️ Installa aggiornamento'}
+            style={{ marginTop: space.md }}
+            disabled={updBusy}
+            onPress={async () => {
+              setUpdBusy(true);
+              const r = await updateNow();
+              if (r !== 'reloading') {
+                setUpdBusy(false);
+                setUpdAvail(false);
+              }
+            }}
+          />
+        ) : null}
+        <Label dim size={12} style={{ marginTop: space.xs }}>
+          {updAvail || updatePending() ? `Versione ${shortVersion()} · aggiornamento disponibile` : `✓ App aggiornata · versione ${shortVersion()}`}
+        </Label>
         {s.error ? (
           <Card style={{ marginTop: space.md, borderColor: c.danger }}>
             <Label color={c.danger}>{s.error}</Label>

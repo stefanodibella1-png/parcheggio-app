@@ -64,3 +64,23 @@ export async function updateNow(): Promise<'reloading' | 'none' | 'error' | 'dis
     return 'error';
   }
 }
+
+/** Controlla e scarica senza riavviare. true = c'è un aggiornamento pronto da installare. */
+export async function updateAvailable(): Promise<boolean> {
+  if (__DEV__ || !Updates.isEnabled) return false;
+  if (pending) return true;
+  try {
+    const r = await Updates.checkForUpdateAsync();
+    if (!r.isAvailable) return false;
+    const f = await Updates.fetchUpdateAsync();
+    if (f.isNew) pending = true;
+    return pending;
+  } catch {
+    return false;
+  }
+}
+
+/** Codice breve della versione installata. */
+export function shortVersion(): string {
+  return Updates.updateId ? Updates.updateId.slice(0, 8) : 'originale';
+}
