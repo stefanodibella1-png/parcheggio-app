@@ -79,6 +79,12 @@ export interface DetectionConfig {
   GEOCODE_MAX_RETRIES: number;
 
   // --- previsione di ritorno (11-bis) ---
+  /** GPS perso entrando in un garage/zona coperta: max secondi tra l'ultimo fix in auto e la camminata */
+  NO_GPS_PARK_MAX_GAP_S: number;
+  /** precisione assegnata al punto stimato in quel caso (m) */
+  NO_GPS_PARK_ACCURACY_M: number;
+  /** in quel caso la ripartenza può comparire fino a questa distanza dal punto stimato (m) */
+  NO_GPS_DEPARTURE_RADIUS: number;
   RETURN_MIN_APPROACH_TIME_S: number;
   RETURN_MIN_APPROACH_M: number;
   RETURN_MIN_CONFIDENCE: number;
@@ -196,6 +202,9 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RECURRING_SPOT_MIN_SESSIONS: 3,
   GEOCODE_MAX_RETRIES: 5,
 
+  NO_GPS_PARK_MAX_GAP_S: 300,
+  NO_GPS_PARK_ACCURACY_M: 60,
+  NO_GPS_DEPARTURE_RADIUS: 500,
   RETURN_MIN_APPROACH_TIME_S: 60,
   RETURN_MIN_APPROACH_M: 30,
   RETURN_MIN_CONFIDENCE: 70,

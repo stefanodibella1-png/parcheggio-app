@@ -165,6 +165,7 @@ export function CarCard({ session, distanceM, now }: { session: ParkingSession; 
         {distanceM !== null ? ` · sei a ${fmtDistance(distanceM)}` : ''}
       </Label>
       {spot.recurringSpot ? <Label dim size={13}>Posto abituale (casa/lavoro)</Label> : null}
+      {session.gpsLostAtPark ? <Label dim size={13}>GPS assente al parcheggio (garage o zona coperta): posizione approssimata</Label> : null}
       <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
         <Button small variant="ghost" title="Copia indirizzo" disabled={!spot.address?.formatted} onPress={() => Clipboard.setStringAsync(spot.address?.formatted ?? '')} />
         <Button small variant="ghost" title="Copia coordinate" onPress={() => Clipboard.setStringAsync(coords)} />

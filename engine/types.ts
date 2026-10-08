@@ -179,6 +179,8 @@ export interface ParkingSession {
   realDepartureT: number | null;
   /** l'utente è sceso e si è allontanato a piedi (esclude code e attese in auto) */
   exitedOnFoot?: boolean;
+  /** GPS assente al momento del parcheggio (garage, parcheggio coperto): punto approssimato */
+  gpsLostAtPark?: boolean;
   /** ricerca del posto prima della sosta (sperimentale) */
   searchStartT?: number | null;
   searchDurationS?: number | null;

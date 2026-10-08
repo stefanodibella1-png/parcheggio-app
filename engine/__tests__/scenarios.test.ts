@@ -313,3 +313,27 @@ test('25. salto GPS di centinaia di metri durante il ritorno → la previsione n
   assert.ok(!cancelled, r.log);
   assert.equal(releases(r.events).length, 1, r.log);
 });
+
+test('26. garage o parcheggio coperto: GPS perso entrando, poi a piedi → parcheggio (qualità C, mai condiviso); ripartenza dal garage → sessione chiusa (test reale 08/10 pomeriggio)', () => {
+  const s = new Scenario()
+    .drive(300)
+    .drive(40, 15, 90, { gpsLost: true })
+    .stopInCar(40, { gpsLost: true })
+    .walk(60, 0, 4.5, { gpsLost: true })
+    .walk(300, 0)
+    .stand(60)
+    .silence(1800)
+    .walk(360, 180)
+    .walk(60, 180, 4.5, { gpsLost: true })
+    .stopInCar(40, { gpsLost: true })
+    .drive(40, 15, 270, { gpsLost: true })
+    .drive(180, 35, 270);
+  const r = run(s);
+  assert.ok(has(r.events, 'PARKED'), r.log);
+  const sess = r.sessions[0];
+  assert.ok(sess.gpsLostAtPark, r.log);
+  assert.equal(sess.spot.pointQuality, 'C', r.log);
+  assert.ok(sess.exitedOnFoot, r.log);
+  assert.ok(!has(r.events, 'RETURN_PREDICTED'), r.log);
+  assert.notEqual(sess.outcome, 'OPEN', r.log);
+});

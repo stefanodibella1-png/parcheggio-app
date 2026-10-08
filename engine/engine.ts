@@ -763,7 +763,31 @@ export class DetectionEngine {
       return;
     }
     if (c.walkingConfirmed && c.vScore < 40) {
-      // sceso dal veicolo senza una sosta rilevata (es. GPS perso alla fermata)
+      // sceso dal veicolo senza una sosta rilevata: GPS perso entrando in un garage
+      // o in una zona coperta. Il punto è l'ultima posizione certa in auto (qualità C).
+      const last = m.fixes[m.fixes.length - 1];
+      const gapS = last ? (c.now - last.t) / 1000 : Infinity;
+      if (last && gapS <= cfg.NO_GPS_PARK_MAX_GAP_S && gapS >= 20) {
+        const pt: GeoPoint = {
+          latitude: last.latitude,
+          longitude: last.longitude,
+          accuracyM: Math.max(cfg.NO_GPS_PARK_ACCURACY_M, last.accuracy),
+          fixes: 1,
+          spreadM: 0,
+        };
+        m.stopPhase = null;
+        this.openSession(
+          c.now,
+          `a piedi dopo il veicolo senza sosta visibile: GPS perso ${fmtDur(gapS * 1000)} prima ` +
+            `(probabile garage o parcheggio coperto); punto stimato dall'ultima posizione in auto`,
+          pt,
+        );
+        if (m.session) {
+          m.session.exitedOnFoot = true;
+          m.session.gpsLostAtPark = true;
+        }
+        return;
+      }
       this.transition('WALKING', `movimento a piedi dopo il veicolo: score ${c.wScore}`, c.now);
     }
   }
@@ -806,11 +830,11 @@ export class DetectionEngine {
     }
   }
 
-  private openSession(now: number, reason: string): void {
+  private openSession(now: number, reason: string, pointOverride: GeoPoint | null = null): void {
     const m = this.m;
     const ph = m.stopPhase;
     const fixes = ph ? ph.fixes : [];
-    const point = stabilizedPoint(fixes.length > 0 ? fixes : m.fixes.slice(-5));
+    const point = pointOverride ?? stabilizedPoint(fixes.length > 0 ? fixes : m.fixes.slice(-5));
     if (!point) return;
     const parkingId = `${m.idPrefix}-P${++m.parkingSeq}`;
     const spot = this.makeSpot(point, null);
@@ -900,7 +924,8 @@ export class DetectionEngine {
     if (c.vehicleConfirmed && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) {
       const start = m.motionStartFix;
       const startD = start && m.session ? distanceM(m.session.spot.pointFinal, start) : null;
-      if (startD !== null && startD <= cfg.DEPARTURE_START_RADIUS) {
+      const radius = m.session?.gpsLostAtPark ? cfg.NO_GPS_DEPARTURE_RADIUS : cfg.DEPARTURE_START_RADIUS;
+      if (startD !== null && startD <= radius) {
         // tornato all'auto senza che lo vedessimo vicino (es. GPS assente)
         m.departureCandidateSince = c.now;
         this.transition('DEPARTURE_CANDIDATE', `veicolo partito a ${Math.round(startD)} m dal punto di parcheggio`, c.now);
@@ -1306,6 +1331,8 @@ export class DetectionEngine {
   }
 
   private returnScore(now: number): number {
+    // punto dell'auto troppo incerto (garage senza GPS): nessuna previsione
+    if (this.m.session?.gpsLostAtPark) return 0;
     return Math.max(this.returnScoreShort(now), this.returnScoreLong(now));
   }
 
