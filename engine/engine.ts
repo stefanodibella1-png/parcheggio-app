@@ -113,6 +113,8 @@ interface Memory {
   returnJump: { t: number; d: number } | null;
   /** semafori noti (chiave = lat,lon arrotondati) */
   signals: Record<string, { latitude: number; longitude: number }>;
+  /** distributori di carburante noti */
+  fuel: Record<string, { latitude: number; longitude: number }>;
 
   drivePath?: { t: number; latitude: number; longitude: number }[];
   search?: { startT: number; distanceM: number; lastT: number; endedT: number | null } | null;
@@ -203,6 +205,7 @@ export class DetectionEngine {
       returnSeries: [],
       returnJump: null,
       signals: {},
+      fuel: {},
       drivePath: [],
       search: null,
       scores: { ...ZERO },
@@ -229,6 +232,11 @@ export class DetectionEngine {
 
   get state(): EngineState {
     return this.m.state;
+  }
+
+  /** ora dell'input più recente elaborato (serve all'app per riconoscere input arrivati in ritardo) */
+  get lastInputT(): number {
+    return this.m.lastT;
   }
 
   getSessions(): ParkingSession[] {
@@ -294,6 +302,10 @@ export class DetectionEngine {
           const k = `${g.latitude.toFixed(5)},${g.longitude.toFixed(5)}`;
           this.m.signals[k] = { latitude: g.latitude, longitude: g.longitude };
         }
+        if (!this.m.fuel) this.m.fuel = {};
+        for (const g of input.fuel ?? []) {
+          this.m.fuel[`${g.latitude.toFixed(5)},${g.longitude.toFixed(5)}`] = { latitude: g.latitude, longitude: g.longitude };
+        }
         break;
       default:
         break;
@@ -310,8 +322,12 @@ export class DetectionEngine {
 
   /** distanza dal semaforo noto più vicino (m), null se nessuno entro 200 m */
   private nearestSignal(p: { latitude: number; longitude: number }): number | null {
+    return this.nearestOf(this.m.signals ?? {}, p);
+  }
+
+  private nearestOf(set: Record<string, { latitude: number; longitude: number }>, p: { latitude: number; longitude: number }): number | null {
     let best: number | null = null;
-    for (const g of Object.values(this.m.signals ?? {})) {
+    for (const g of Object.values(set)) {
       if (Math.abs(g.latitude - p.latitude) > 0.002 || Math.abs(g.longitude - p.longitude) > 0.003) continue;
       const d = distanceM(p, g);
       if (best === null || d < best) best = d;
@@ -920,11 +936,13 @@ export class DetectionEngine {
     }
     m.search = null;
     m.drivePath = [];
+    const fuelD = this.nearestOf(m.fuel ?? {}, point);
+    if (fuelD !== null && fuelD <= this.cfg.FUEL_RADIUS_M) session.atFuelStation = true;
     m.session = session;
     m.sessions.push(session);
     m.stopPhase = null;
     m.awayVehicleLogged = false;
-    this.transition('PARKED', reason, now, { parkingId });
+    this.transition('PARKED', session.atFuelStation ? `${reason} (distributore di carburante: rifornimento, non condiviso)` : reason, now, { parkingId });
   }
 
   /**

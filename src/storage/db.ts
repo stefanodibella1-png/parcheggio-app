@@ -227,6 +227,28 @@ export async function appendEvents(testId: string, events: DetectionEvent[]): Pr
   });
 }
 
+/** Sostituisce tutti gli eventi di un test (dopo una ricostruzione dal registro degli input). */
+export async function replaceEvents(testId: string, events: DetectionEvent[]): Promise<void> {
+  const db = await getDb();
+  await tx(db, async () => {
+    await db.runAsync('DELETE FROM events WHERE testId = ?', [testId]);
+    for (const e of events) {
+      await db.runAsync('INSERT OR REPLACE INTO events (id, testId, t, json) VALUES (?, ?, ?, ?)', [e.id, testId, e.t, JSON.stringify(e)]);
+    }
+  });
+}
+
+/** Elimina le sessioni del test che non esistono più dopo una ricostruzione. */
+export async function deleteSessionsExcept(testId: string, keep: string[]): Promise<void> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ parkingId: string }>('SELECT parkingId FROM sessions WHERE testId = ?', [testId]);
+  const drop = rows.map((r) => r.parkingId).filter((id) => !keep.includes(id));
+  if (drop.length === 0) return;
+  await tx(db, async () => {
+    for (const id of drop) await db.runAsync('DELETE FROM sessions WHERE parkingId = ?', [id]);
+  });
+}
+
 export async function getEvents(testId?: string): Promise<DetectionEvent[]> {
   const db = await getDb();
   const rows = testId

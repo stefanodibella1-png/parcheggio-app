@@ -73,6 +73,11 @@ export class ReorderBuffer {
     return ready;
   }
 
+  /** Toglie dal buffer gli input già elaborati altrove (ricostruzione dal registro). */
+  dropIf(pred: (i: EngineInput) => boolean): void {
+    this.buf = this.buf.filter((i) => !pred(i));
+  }
+
   flush(): EngineInput[] {
     const all = this.buf.sort((a, b) => inputTime(a) - inputTime(b));
     this.buf = [];

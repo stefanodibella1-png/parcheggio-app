@@ -378,3 +378,27 @@ function run2(inputs: EngineInput[]) {
   const r = replay(inputs);
   return { ...r, log: trace(r.events, r.t0) };
 }
+
+test('29. sosta a un distributore (OpenStreetMap) → sessione segnata come rifornimento', () => {
+  const s = new Scenario().drive(300);
+  const map: EngineInput = { kind: 'mapFeatures', t: s.t - 60_000, signals: [], fuel: [{ latitude: s.lat, longitude: s.lon + 0.0002 }] };
+  s.stopInCar(300).drive(120);
+  const r = run2([...s.inputs, map]);
+  assert.ok(has(r.events, 'PARKED'), r.log);
+  assert.ok(r.sessions[0].atFuelStation, r.log);
+  assert.match(r.events.find((e) => e.type === 'PARKED')!.reason, /distributore/);
+});
+
+test('30. dati consegnati in ritardo a blocchi (app congelata) → la ricostruzione in ordine dà lo stesso risultato', () => {
+  const s = new Scenario().drive(300).stopInCar(200).walk(300, 0).stand(60);
+  const sorted = replay(s.inputs);
+  // ordine di arrivo: prima tutte le attività, poi le posizioni in ritardo
+  const late = [...s.inputs.filter((i) => i.kind !== 'location'), ...s.inputs.filter((i) => i.kind === 'location')];
+  const live = new DetectionEngine(undefined, 'L');
+  for (const i of late) live.process(i);
+  // ciò che fa l'app: rielabora tutto il registro in ordine
+  const rebuilt = replay(late);
+  assert.equal(rebuilt.events.length, sorted.events.length);
+  assert.deepEqual(rebuilt.sessions.map((x) => x.outcome), sorted.sessions.map((x) => x.outcome));
+  assert.ok(live.lastInputT >= Math.max(...s.inputs.map((i) => (i.kind === 'location' || i.kind === 'activity' || i.kind === 'motion' ? i.sample.t : i.t))));
+});

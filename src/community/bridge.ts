@@ -49,6 +49,8 @@ export class CommunityBridge {
     if (!session.exitedOnFoot && !session.inferred) return;
     // garage o parcheggio coperto: non è un posto su strada
     if (session.gpsLostAtPark) return;
+    // rifornimento al distributore
+    if (session.atFuelStation) return;
     switch (e.type) {
       case 'RETURN_PREDICTED':
         await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now);

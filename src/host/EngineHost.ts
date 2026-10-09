@@ -397,9 +397,9 @@ class Host {
         return;
       }
       this.osmTiles.add(key);
-      if (!this.state.active || list.length === 0) return;
+      if (!this.state.active || (list.signals.length === 0 && list.fuel.length === 0)) return;
       const t = Date.now();
-      this.push({ kind: 'mapFeatures', t, signals: list });
+      this.push({ kind: 'mapFeatures', t, signals: list.signals, fuel: list.fuel });
       this.pump(t);
     } finally {
       this.osmBusy = false;
@@ -460,9 +460,64 @@ class Host {
 
   /** Rilascia al motore gli input pronti (ordinati) */
   private pump(now: number): void {
-    for (const i of this.buffer.release(now)) this.process(i);
+    if (this.rebuilding) return; // gli input restano nel buffer fino alla fine della ricostruzione
+    const ready = this.buffer.release(now);
+    if (this.engine && ready.length > 0 && now - this.lastRebuildT > 60_000) {
+      // il telefono ha consegnato in ritardo un blocco di dati (app congelata in background):
+      // elaborarli "dopo" darebbe risultati sbagliati, quindi si ricostruisce tutto in ordine
+      const limit = this.engine.lastInputT - this.engine.cfg.LATE_INPUT_REBUILD_S * 1000;
+      const late = ready.filter((i) => (i.kind === 'location' || i.kind === 'activity') && inputTime(i) < limit);
+      if (late.length >= 5) {
+        void this.rebuild(late.length);
+        return;
+      }
+    }
+    for (const i of ready) this.process(i);
     this.refreshFromEngine();
     if (now - this.lastPersistT > 5000) void this.flush(false);
+  }
+
+  private rebuilding = false;
+  private lastRebuildT = 0;
+
+  /** Rielabora l'intero test dal registro degli input, in ordine di tempo. */
+  private async rebuild(lateCount: number): Promise<void> {
+    const testId = this.state.testId;
+    if (!testId || !this.engine || this.rebuilding) return;
+    this.rebuilding = true;
+    this.lastRebuildT = Date.now();
+    try {
+      await this.flush(true); // tutti gli input ricevuti finiscono nel registro
+      const all = normalizeInputs(await db.getInputs(testId)).inputs;
+      const before = this.engine.state;
+      const fresh = new DetectionEngine(this.engine.cfg, testId);
+      const events: DetectionEvent[] = [];
+      for (const i of all) events.push(...fresh.process(i));
+      fresh.drainSnapshots();
+      const done = new Set(all.map((i) => JSON.stringify(i)));
+      this.buffer.dropIf((i) => done.has(JSON.stringify(i)));
+      const old = await db.getEvents(testId);
+      const seen = new Set(old.map((e) => `${e.type}|${e.t}`));
+      const added = events.filter((e) => !seen.has(`${e.type}|${e.t}`));
+      this.engine = fresh;
+      this.pendingEvents = [];
+      await db.replaceEvents(testId, events);
+      await db.deleteSessionsExcept(testId, fresh.getSessions().map((x) => x.parkingId));
+      for (const x of fresh.getSessions()) this.dirtySessions.add(x.parkingId);
+      this.state.events = events.slice(-MAX_UI_EVENTS);
+      this.state.error = null;
+      this.refreshFromEngine();
+      if (added.length > 0) await this.handleEvents(added, before, Date.now() - 10 * 60_000);
+      else await this.applySideEffectsForState(fresh.state);
+      await this.flush(true);
+      void this.retryGeocoding();
+      console.log(`[rebuild] ${lateCount} input in ritardo, ${added.length} eventi nuovi`);
+    } catch (e) {
+      this.state.error = `Ricostruzione: ${String(e)}`;
+    } finally {
+      this.rebuilding = false;
+    }
+    this.pump(Date.now());
   }
 
   private tick(): void {
@@ -520,7 +575,7 @@ class Host {
 
   // ---- effetti degli eventi --------------------------------------------------------------
 
-  private async handleEvents(events: DetectionEvent[], _before: EngineState): Promise<void> {
+  private async handleEvents(events: DetectionEvent[], _before: EngineState, minNotifyT = 0): Promise<void> {
     const testId = this.state.testId;
     if (!testId || !this.engine) return;
     for (const e of events) {
@@ -536,8 +591,11 @@ class Host {
         await this.geocode(session);
       }
       const ri = this.engine.snapshot().returnInfo;
-      await notifyEvent(e, session ?? null, testId, ri);
-      void this.community.onEvent(e, session ?? null, ri, Date.now());
+      // dopo una ricostruzione non si notificano eventi vecchi (sarebbero solo rumore)
+      if (e.t >= minNotifyT) {
+        await notifyEvent(e, session ?? null, testId, ri);
+        void this.community.onEvent(e, session ?? null, ri, Date.now());
+      }
     }
     const last = events[events.length - 1];
     await this.applySideEffectsForState(last.to);
