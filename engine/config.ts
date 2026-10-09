@@ -134,6 +134,10 @@ export interface DetectionConfig {
   COMMUNITY_SOON_TTL_S: number;
   /** validità di un posto appena liberato (s) */
   COMMUNITY_FREED_TTL_S: number;
+  /** sosta minima perché un posto sia condiviso: sotto è probabile doppia fila o fermata (s) */
+  COMMUNITY_MIN_PARK_S: number;
+  /** chi cerca e parcheggia entro questa distanza da un posto ricevuto lo conferma come vero (m) */
+  COMMUNITY_TAKEN_RADIUS_M: number;
 
   // --- pesi degli score ---
   W_VEHICLE: { speed: number; activity: number; motion: number };
@@ -241,6 +245,8 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   COMMUNITY_LINGER_S: 300,
   COMMUNITY_SOON_TTL_S: 300,
   COMMUNITY_FREED_TTL_S: 300,
+  COMMUNITY_MIN_PARK_S: 600,
+  COMMUNITY_TAKEN_RADIUS_M: 20,
 
   W_VEHICLE: { speed: 0.5, activity: 0.35, motion: 0.15 },
   W_WALKING: { speed: 0.3, activity: 0.45, steps: 0.25 },

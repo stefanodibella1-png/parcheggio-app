@@ -6,7 +6,8 @@ import type { DetectionConfig } from '../../engine/config.ts';
 import type { DetectionEvent, EngineSnapshot, LocationSample, ParkingSession, ReturnInfo } from '../../engine/types.ts';
 import { notifyNearbySpot } from '../services/notifications.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
-import { communityConfigured, fetchNearby, publishSpot, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
+import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
+import { distanceM } from '../../engine/geo.ts';
 
 export interface CommunityState {
   configured: boolean;
@@ -28,6 +29,8 @@ export class CommunityBridge {
   /** posti già notificati (id → tipo), per non ripetere l'avviso */
   private notified = new Map<string, SpotKind>();
   private lastSoonPush = 0;
+  /** posti ricevuti di recente (per riconoscere quando chi cercava li ha davvero presi) */
+  private received = new Map<string, { spot: NearbySpot; t: number }>();
 
   constructor(private cfg: () => DetectionConfig, private onChange: () => void) {}
 
@@ -45,8 +48,15 @@ export class CommunityBridge {
   async onEvent(e: DetectionEvent, session: ParkingSession | null, ri: ReturnInfo | null, now: number): Promise<void> {
     if (!this.state.configured || !session) return;
     const id = session.parkingId;
+    // chi cercava ha parcheggiato proprio su un posto ricevuto: conferma automatica che il posto è vero
+    if (e.type === 'PARKED') await this.checkTaken(session, now);
     // solo posti veri: l'utente è sceso dall'auto (non code o attese in doppia fila)
     if (!session.exitedOnFoot && !session.inferred) return;
+    // sosta breve: probabile doppia fila o fermata veloce (a Catania frequentissime)
+    if (!session.inferred && session.parkedT !== null) {
+      const parkedS = ((e.type === 'PARKING_RELEASED' ? e.t : now) - session.parkedT) / 1000;
+      if (parkedS < this.cfg().COMMUNITY_MIN_PARK_S) return;
+    }
     // garage o parcheggio coperto: non è un posto su strada
     if (session.gpsLostAtPark) return;
     // rifornimento al distributore
@@ -81,6 +91,21 @@ export class CommunityBridge {
     if (this.state.shared?.id !== session.parkingId || this.state.shared.kind !== 'SOON') return;
     if (now - this.lastSoonPush < 30_000) return;
     await this.share(session, 'SOON', now + ri.releaseEtaS * 1000, now);
+  }
+
+  private async checkTaken(session: ParkingSession, now: number): Promise<void> {
+    const p = session.spot.pointFinal;
+    for (const [id, r] of this.received) {
+      if (now - r.t > 30 * 60_000) {
+        this.received.delete(id);
+        continue;
+      }
+      if (distanceM(p, r.spot) <= this.cfg().COMMUNITY_TAKEN_RADIUS_M) {
+        await recordTaken({ spotId: id, latitude: r.spot.latitude, longitude: r.spot.longitude, t: now, deviceId: this.deviceId });
+        this.received.delete(id);
+        return;
+      }
+    }
   }
 
   private async share(session: ParkingSession, kind: SpotKind, freeAt: number, now: number): Promise<void> {
@@ -141,6 +166,7 @@ export class CommunityBridge {
         this.state.error = null;
         this.state.nearby = list;
         this.state.lastSyncT = now;
+        for (const s of list) this.received.set(s.id, { spot: s, t: now });
         // avvisa solo per i 2 posti più vicini, una volta (di nuovo se da "si libera" diventa "libero")
         const best = [...list].sort((a, b) => a.distanceM - b.distanceM).slice(0, 2);
         for (const s of best) {

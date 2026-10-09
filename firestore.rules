@@ -4,6 +4,16 @@ rules_version = '2';
 // coordinate, cella geohash, tipo, orari, indirizzo. Niente altro.
 service cloud.firestore {
   match /databases/{database}/documents {
+    // conferme automatiche: un utente ha davvero parcheggiato su un posto ricevuto
+    match /validations/{id} {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['spotId', 'latitude', 'longitude', 'geohash6', 't', 'deviceId'])
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.geohash6 is string
+        && request.resource.data.geohash6.size() == 6;
+    }
     match /spots/{id} {
       allow read: if true;
       allow delete: if true;

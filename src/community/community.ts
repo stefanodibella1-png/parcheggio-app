@@ -171,3 +171,18 @@ export async function fetchNearby(
   }
   return out.sort((a, b2) => a.freeAt - b2.freeAt || a.distanceM - b2.distanceM);
 }
+
+/**
+ * Conferma automatica: chi cercava ha parcheggiato su un posto ricevuto.
+ * Serve a costruire nel tempo la mappa dei posti veri (contro doppie file e soste vietate).
+ */
+export async function recordTaken(v: { spotId: string; latitude: number; longitude: number; t: number; deviceId: string }): Promise<void> {
+  const b = base();
+  if (!b) return;
+  const id = `${v.spotId}-${v.deviceId}`;
+  await call(`${b}/validations/${encodeURIComponent(id)}?${keyParam()}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: toFields({ ...v, geohash6: encode(v.latitude, v.longitude, 6) }) }),
+  });
+}

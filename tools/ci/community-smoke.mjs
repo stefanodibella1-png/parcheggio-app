@@ -15,4 +15,6 @@ const found = rows.some((r) => r.document && r.document.name.endsWith('/spots/ci
 if (!found) { console.log(`::error title=Community lettura::HTTP ${q.status} posto di prova non trovato`); process.exit(1); }
 const bad = await fetch(`${base}/spots/ci-bad?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: f({ evil: 'x' }) }) });
 const d = await fetch(`${base}/spots/ci-test?key=${apiKey}`, { method: 'DELETE' });
-console.log(`::notice title=Community prova::scrittura OK, lettura per zona OK, cancellazione ${d.ok ? 'OK' : 'KO ' + d.status}, documento non valido ${bad.ok ? 'ACCETTATO (regole da rivedere)' : 'rifiutato dalle regole OK'}`);
+const v = await fetch(`${base}/validations/ci-test?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: f({ spotId: 'ci-test', latitude: 37.5079, longitude: 15.083, geohash6: 'sqdxqe', t: now, deviceId: 'ci' }) }) });
+if (!v.ok) { console.log(`::error title=Community conferme::HTTP ${v.status} ${(await v.text()).slice(0, 300).replace(/\n/g, ' ')}`); process.exit(1); }
+console.log(`::notice title=Community prova::conferma automatica (posto preso) OK; scrittura OK, lettura per zona OK, cancellazione ${d.ok ? 'OK' : 'KO ' + d.status}, documento non valido ${bad.ok ? 'ACCETTATO (regole da rivedere)' : 'rifiutato dalle regole OK'}`);
