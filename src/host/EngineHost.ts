@@ -22,6 +22,8 @@ import type {
 import * as db from '../storage/db.ts';
 import {
   getLocationMode,
+  locationRunning,
+  restartLocation,
   startGeofences,
   startLocation,
   stopGeofences,
@@ -96,6 +98,7 @@ class Host {
   /** ultima posizione ricevuta (ora del telefono) e ultimo avviso di app sospesa */
   private lastLocRecvT = 0;
   private suspendWarnT = 0;
+  private gpsDeadWarnT = 0;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -359,7 +362,8 @@ class Host {
       void this.logPower(now);
     }
     // app sospesa dal telefono: in modalità continua le posizioni arrivano ogni secondo
-    if (this.lastLocRecvT > 0 && getLocationMode() === 'high' && now - this.lastLocRecvT > 180_000 && now - this.suspendWarnT > 1800_000) {
+    const driving = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING', 'VEHICLE_DEPARTED'].includes(this.engine?.state ?? '');
+    if (driving && this.lastLocRecvT > 0 && now - this.lastLocRecvT > 180_000 && now - this.suspendWarnT > 1800_000) {
       this.suspendWarnT = now;
       const min = Math.round((now - this.lastLocRecvT) / 60000);
       void notifyWarning(
@@ -377,6 +381,16 @@ class Host {
 
   ingestActivity(a: ActivitySample): void {
     if (!this.state.active) return;
+    // in auto ma nessuna posizione da minuti: il telefono ha fermato il GPS
+    const nowA = Date.now();
+    if (a.activity === 'IN_VEHICLE' && a.confidence >= 70 && this.lastLocRecvT > 0 && nowA - this.lastLocRecvT > 120_000 && nowA - this.gpsDeadWarnT > 1800_000) {
+      this.gpsDeadWarnT = nowA;
+      void notifyWarning(
+        '⚠️ Il telefono ha fermato il GPS di PARCHEGGIO',
+        'Sei in auto ma non arrivano posizioni. Apri l\'app un attimo: il GPS riparte da solo.',
+        'warning-gps',
+      );
+    }
     this.counts.activity.push(Date.now());
     this.state.rates.lastActivityT = a.t;
     this.push({ kind: 'activity', sample: a });
@@ -635,7 +649,11 @@ class Host {
     if (!this.state.active) return;
     // Android 12+: un foreground service non si può (ri)avviare dal background.
     // In background si resta nella modalità corrente (più consumo, ma sicuro).
-    if (Platform.OS === 'android' && AppState.currentState !== 'active' && getLocationMode() !== null) return;
+    // Anche dopo un riavvio dell'app in background (getLocationMode() null) il servizio può essere
+    // ancora attivo: toccarlo da qui lo fermerebbe senza poterlo riavviare (test 09/10 notte).
+    if (Platform.OS === 'android' && AppState.currentState !== 'active') {
+      if (getLocationMode() !== null || (await locationRunning())) return;
+    }
     const st = this.engine?.state ?? 'UNKNOWN';
     try {
       await startLocation(mode, `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`);
@@ -768,6 +786,14 @@ class Host {
     await this.catchUpActivities();
     this.pump(Date.now());
     if (this.engine) await this.applySideEffectsForState(this.engine.state);
+    // GPS fermato dal telefono: in primo piano si può riavviare
+    setTimeout(() => {
+      if (!this.state.active || Date.now() - this.lastLocRecvT < 30_000) return;
+      const st = this.engine?.state ?? 'UNKNOWN';
+      void restartLocation(getLocationMode() ?? 'high', `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`).catch((e) => {
+        this.state.error = `Posizione: ${String(e)}`;
+      });
+    }, 15_000);
   }
 
   async onBackground(): Promise<void> {

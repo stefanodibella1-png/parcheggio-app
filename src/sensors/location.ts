@@ -51,6 +51,20 @@ export async function stopLocation(): Promise<void> {
   }
 }
 
+/** Riavvio forzato (solo con l'app in primo piano): serve quando il telefono ha fermato il GPS. */
+export async function restartLocation(mode: LocationMode, body: string): Promise<void> {
+  if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+  }
+  currentMode = mode;
+  currentBody = body;
+  await Location.startLocationUpdatesAsync(LOCATION_TASK, optionsFor(mode, body));
+}
+
+export async function locationRunning(): Promise<boolean> {
+  return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
+}
+
 export function getLocationMode(): LocationMode | null {
   return currentMode;
 }

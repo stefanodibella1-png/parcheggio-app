@@ -320,6 +320,13 @@ export class DetectionEngine {
     return this.out;
   }
 
+  /** ultimi 3 fix validi, ravvicinati, tutti in movimento (>= 5 km/h) e abbastanza precisi */
+  private sustainedMove(now: number): boolean {
+    const f = this.m.fixes.slice(-3);
+    if (f.length < 3 || now - f[0].t > 8000) return false;
+    return f.every((x) => x.accuracy <= 20 && x.speed !== null && x.speed >= 1.4);
+  }
+
   /** distanza dal semaforo noto più vicino (m), null se nessuno entro 200 m */
   private nearestSignal(p: { latitude: number; longitude: number }): number | null {
     return this.nearestOf(this.m.signals ?? {}, p);
@@ -984,8 +991,13 @@ export class DetectionEngine {
       this.transition('PARKED_USER_AWAY', `a ${d} m dall'auto da ${this.cfg.AWAY_STILL_S} s senza veicolo: sei sceso, il parcheggio resta occupato`, c.now);
       return;
     }
+    // GPS al chiuso: "velocità" fittizie a telefono fermo. Il movimento deve essere sostenuto
+    // (3 fix di fila) e non contraddetto dal sistema che dice "fermo" con buona confidenza.
+    const stillSaysSystem = c.act?.activity === 'STILL' && (c.act?.confidence ?? 0) >= 60;
     const startMoving =
       c.wScore < 50 &&
+      !stillSaysSystem &&
+      this.sustainedMove(c.now) &&
       ((c.kmh !== null && c.kmh >= 5 && m.motionStartFix !== null) ||
         (d !== null && d > cfg.RESUME_DISTANCE && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX));
     if (startMoving || c.vehicleConfirmed) {

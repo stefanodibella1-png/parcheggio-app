@@ -67,8 +67,11 @@ export function textFor(
     case 'POSSIBLE_PARKING':
       return { title: '🅿️ Possibile parcheggio', body: 'Auto ferma nello stesso punto.', important: false };
     case 'PARKED':
+      // solo per un parcheggio nuovo, non quando si torna a "parcheggiata" dopo un falso movimento
+      if (e.from === 'DEPARTURE_CANDIDATE' || e.from === 'USER_RETURNING' || e.from === 'PARKED_USER_AWAY') return null;
       return { title: '🅿️ Parcheggio confermato', body: `Auto parcheggiata${addr(session)}.`, important: true };
     case 'PARKED_USER_AWAY':
+      if (e.from !== 'PARKED') return null; // una volta sola, quando scendi e ti allontani
       return { title: "🚶 Ti stai allontanando dall'auto", body: 'Il parcheggio resta occupato.', important: false };
     case 'RETURN_PREDICTED':
       return { ...returnText(session, ri), important: true };
@@ -80,7 +83,7 @@ export function textFor(
         important: true,
       };
     case 'DEPARTURE_CANDIDATE':
-      return { title: '🚗 Movimento rilevato', body: 'Verifica in corso: auto o a piedi?', important: false };
+      return null; // verifica interna: avvisa solo l'esito (partenza o posto liberato)
     case 'VEHICLE_DEPARTED':
       return { title: '🚗 Ripartenza in veicolo rilevata', body: e.reason, important: false };
     case 'PARKING_RELEASED':
@@ -91,7 +94,8 @@ export function textFor(
         important: true,
       };
     case 'LOW_CONFIDENCE':
-      return { title: '❔ Rilevamento incerto', body: e.reason, important: false };
+      if (e.from !== 'VEHICLE_DEPARTED') return null;
+      return { title: '❔ Partenza incerta', body: e.reason, important: false };
     default:
       return null;
   }
