@@ -601,6 +601,9 @@ export class DetectionEngine {
     if (speedComp === null) {
       // senza velocità GPS il veicolo non si conferma: tetto a 60
       score = Math.min(60, 100 * ((w.activity * actComp + w.motion * motionComp) / (w.activity + w.motion)));
+    } else if (!act) {
+      // nessun dato di attività dal sistema (servizio fermo): decidono velocità e movimento
+      score = (100 * (w.speed * speedComp + w.motion * motionComp)) / (w.speed + w.motion);
     } else {
       score = 100 * (w.speed * speedComp + w.activity * actComp + w.motion * motionComp);
     }

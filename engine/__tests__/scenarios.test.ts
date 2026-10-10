@@ -402,3 +402,11 @@ test('30. dati consegnati in ritardo a blocchi (app congelata) → la ricostruzi
   assert.deepEqual(rebuilt.sessions.map((x) => x.outcome), sorted.sessions.map((x) => x.outcome));
   assert.ok(live.lastInputT >= Math.max(...s.inputs.map((i) => (i.kind === 'location' || i.kind === 'activity' || i.kind === 'motion' ? i.sample.t : i.t))));
 });
+
+test('31. riconoscimento attività assente (servizio fermo) → guida, parcheggio e rilascio solo dal GPS', () => {
+  const s = new Scenario().drive(300, 25).stopInCar(180).drive(120, 25);
+  const r = run2(s.inputs.filter((i) => i.kind !== 'activity'));
+  assert.ok(has(r.events, 'IN_VEHICLE'), r.log);
+  assert.ok(has(r.events, 'PARKED'), r.log);
+  assert.equal(releases(r.events).length, 1, r.log);
+});

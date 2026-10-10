@@ -99,6 +99,7 @@ class Host {
   private lastLocRecvT = 0;
   private suspendWarnT = 0;
   private gpsDeadWarnT = 0;
+  private lastActDrainT = 0;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -374,6 +375,12 @@ class Host {
     }
     this.lastLocRecvT = now;
     this.resolveCarry(samples, now);
+    // Android: dopo un riavvio dell'app (es. aggiornamento) il modulo attività può restare
+    // "scollegato" e i risultati finiscono solo nel buffer nativo: li si recupera da qui.
+    if (Platform.OS === 'android' && now - this.lastActDrainT > 5000) {
+      this.lastActDrainT = now;
+      void this.drainActivities();
+    }
     const last = samples[samples.length - 1];
     if (last) void this.loadSignals(last.latitude, last.longitude, now);
     this.pump(now);
@@ -461,6 +468,18 @@ class Host {
     await this.catchUpActivities();
     this.pump(now);
     await this.flush(true);
+  }
+
+  private async drainActivities(): Promise<void> {
+    const list = await bufferedActivities();
+    if (list.length === 0 || !this.state.active) return;
+    const t = Date.now();
+    for (const a of list) {
+      this.counts.activity.push(t);
+      this.push({ kind: 'activity', sample: a });
+    }
+    this.state.rates.lastActivityT = list[list.length - 1].t;
+    this.pump(t);
   }
 
   /** Recupera le attività registrate dal sistema mentre l'app era sospesa. */
@@ -560,6 +579,10 @@ class Host {
     if (!this.state.active) return;
     const now = Date.now();
     this.push({ kind: 'tick', t: now });
+    if (Platform.OS === 'android' && now - this.lastActDrainT > 5000) {
+      this.lastActDrainT = now;
+      void this.drainActivities();
+    }
     this.pump(now);
     this.updateRates(now);
     const track = this.state.track;
