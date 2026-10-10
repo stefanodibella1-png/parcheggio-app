@@ -101,6 +101,7 @@ class Host {
   private gpsDeadWarnT = 0;
   private lastActDrainT = 0;
   private lastActKickT = 0;
+  private lastGpsRestartT = 0;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -472,6 +473,26 @@ class Host {
     await this.flush(true);
   }
 
+  /**
+   * Con l'app aperta (il tick gira solo in primo piano) e nessuna posizione da oltre 60 s,
+   * il servizio GPS è stato fermato dal telefono: lo si riavvia (permesso solo in primo piano).
+   */
+  private maybeRestartGps(now: number): void {
+    if (!this.state.active || AppState.currentState !== 'active') return;
+    const last = this.lastLocRecvT || this.state.startedAt || now;
+    if (now - last < 60_000 || now - this.lastGpsRestartT < 60_000) return;
+    this.lastGpsRestartT = now;
+    const st = this.engine?.state ?? 'UNKNOWN';
+    void restartLocation('high', `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`)
+      .then(() => {
+        if (this.state.error?.startsWith('Posizione')) this.state.error = null;
+      })
+      .catch((e) => {
+        this.state.error = `Posizione: il GPS non riparte (${String(e)})`;
+        this.emitChange();
+      });
+  }
+
   /** Nessuna attività da Play Services per 90 s (in movimento o all'avvio): si rifà la registrazione, al massimo ogni 10 min. */
   private maybeKickActivity(now: number): void {
     if (Platform.OS !== 'android' || !this.state.active || !this.state.startedAt) return;
@@ -595,6 +616,7 @@ class Host {
       void this.drainActivities();
     }
     this.maybeKickActivity(now);
+    this.maybeRestartGps(now);
     this.pump(now);
     this.updateRates(now);
     const track = this.state.track;
