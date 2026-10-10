@@ -1,3 +1,4 @@
+import { shareExport } from '../../services/exportTest.ts';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { computeMetrics, type Metrics, type TestRecord } from '../../../engine/analysis.ts';
@@ -93,6 +94,12 @@ export function ResultsScreen({ nav }: { nav: Nav }) {
             </Label>
           </Pressable>
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.sm }}>
+            <Button
+              small
+              title="Esporta"
+              style={{ flex: 1 }}
+              onPress={() => void shareExport(t.id, 'json').catch((e) => Alert.alert('Esportazione non riuscita', String(e)))}
+            />
             <Button small variant="ghost" title="Rivedi" style={{ flex: 1 }} onPress={() => nav.push({ name: 'review', testId: t.id })} />
             <Button
               small
