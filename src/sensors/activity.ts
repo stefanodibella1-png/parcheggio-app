@@ -8,16 +8,27 @@ export function toActivitySample(a: NativeActivity): ActivitySample {
   return { t: a.t, activity: a.activity, confidence: a.confidence, platform: a.platform, source: a.source };
 }
 
+let nativeStarted = false;
+
 export function startActivity(onSample: (s: ActivitySample) => void): void {
-  stopActivity();
+  // Solo il listener JS si sostituisce. La richiesta a Play Services NON va tolta e rimessa:
+  // le due operazioni sono asincrone e la rimozione poteva arrivare dopo, lasciando
+  // il riconoscimento spento ("attività 0/min").
+  sub?.remove();
   sub = ActivityRecognition.addListener((a) => onSample(toActivitySample(a)));
-  ActivityRecognition.start(3000);
+  if (!nativeStarted) {
+    nativeStarted = true;
+    ActivityRecognition.start(3000);
+  }
 }
 
 export function stopActivity(): void {
   sub?.remove();
   sub = null;
-  ActivityRecognition.stop();
+  if (nativeStarted) {
+    nativeStarted = false;
+    ActivityRecognition.stop();
+  }
 }
 
 /** iOS: attività registrate da Core Motion mentre l'app era sospesa. */

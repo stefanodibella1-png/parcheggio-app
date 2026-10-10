@@ -621,6 +621,11 @@ export class DetectionEngine {
       speedComp = fast > win.length / 3 ? 0 : ok / win.length;
     }
     const act = this.currentActivity(now);
+    // senza riconoscimento attività: chi andava a velocità da auto pochi secondi fa non sta camminando
+    if (!act) {
+      const recentFast = this.m.speeds.some((x) => (now - x.t) / 1000 <= 30 && x.kmh >= cfg.VEHICLE_SPEED_MIN);
+      if (recentFast) return 0;
+    }
     let actComp: number | null = null;
     if (act) {
       if (act.activity === 'WALKING' || act.activity === 'RUNNING') actComp = act.confidence / 100;
