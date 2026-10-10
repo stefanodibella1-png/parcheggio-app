@@ -483,7 +483,7 @@ class Host {
     if (now - last < 60_000 || now - this.lastGpsRestartT < 60_000) return;
     this.lastGpsRestartT = now;
     const st = this.engine?.state ?? 'UNKNOWN';
-    void restartLocation('high', `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`)
+    void restartLocation(getLocationMode() ?? 'high', `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`)
       .then(() => {
         if (this.state.error?.startsWith('Posizione')) this.state.error = null;
       })
@@ -843,14 +843,7 @@ class Host {
     await this.catchUpActivities();
     this.pump(Date.now());
     if (this.engine) await this.applySideEffectsForState(this.engine.state);
-    // GPS fermato dal telefono: in primo piano si può riavviare
-    setTimeout(() => {
-      if (!this.state.active || Date.now() - this.lastLocRecvT < 30_000) return;
-      const st = this.engine?.state ?? 'UNKNOWN';
-      void restartLocation(getLocationMode() ?? 'high', `${STATE_TEXT[st].icon} ${STATE_TEXT[st].label}`).catch((e) => {
-        this.state.error = `Posizione: ${String(e)}`;
-      });
-    }, 15_000);
+    // il riavvio del GPS, se serve, lo fa maybeRestartGps nel tick (solo in primo piano)
   }
 
   async onBackground(): Promise<void> {

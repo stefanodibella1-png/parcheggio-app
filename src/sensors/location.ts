@@ -1,6 +1,6 @@
 // Posizione in foreground e background (expo-location + expo-task-manager).
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { LocationSample } from '../../engine/types.ts';
 
 export const LOCATION_TASK = 'parcheggio-location';
@@ -38,6 +38,8 @@ function optionsFor(mode: LocationMode, body: string): Location.LocationTaskOpti
 
 export async function startLocation(mode: LocationMode, body: string): Promise<void> {
   if (mode === currentMode && body === currentBody) return;
+  // in background su Android non si tocca un servizio già attivo
+  if (Platform.OS === 'android' && AppState.currentState !== 'active' && (await locationRunning())) return;
   currentMode = mode;
   currentBody = body;
   await Location.startLocationUpdatesAsync(LOCATION_TASK, optionsFor(mode, body));
@@ -51,11 +53,14 @@ export async function stopLocation(): Promise<void> {
   }
 }
 
-/** Riavvio forzato (solo con l'app in primo piano): serve quando il telefono ha fermato il GPS. */
+/**
+ * Riavvio del GPS quando il telefono l'ha fermato. SOLO con l'app in primo piano:
+ * in background Android non permette di riavviare il servizio, e un arresto
+ * seguito da un avvio fallito lo lascerebbe spento (test 10/10 alle 13:07).
+ * Niente arresto: si richiama l'avvio, che riattiva il servizio con le stesse opzioni.
+ */
 export async function restartLocation(mode: LocationMode, body: string): Promise<void> {
-  if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)) {
-    await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
-  }
+  if (Platform.OS === 'android' && AppState.currentState !== 'active') return;
   currentMode = mode;
   currentBody = body;
   await Location.startLocationUpdatesAsync(LOCATION_TASK, optionsFor(mode, body));
