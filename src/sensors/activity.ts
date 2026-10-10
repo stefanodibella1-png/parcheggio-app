@@ -22,6 +22,17 @@ export function startActivity(onSample: (s: ActivitySample) => void): void {
   }
 }
 
+/**
+ * Se Play Services non manda nulla, si rifà la registrazione da zero:
+ * prima la rimozione, poi (dopo che è stata eseguita) una nuova richiesta.
+ */
+export async function kickActivity(): Promise<void> {
+  ActivityRecognition.stop();
+  await new Promise((r) => setTimeout(r, 3000));
+  ActivityRecognition.start(3000);
+  nativeStarted = true;
+}
+
 export function stopActivity(): void {
   sub?.remove();
   sub = null;

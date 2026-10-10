@@ -30,7 +30,7 @@ import {
   stopLocation,
   type LocationMode,
 } from '../sensors/location.ts';
-import { activityHistory, bufferedActivities, startActivity, stopActivity } from '../sensors/activity.ts';
+import { activityHistory, bufferedActivities, kickActivity, startActivity, stopActivity } from '../sensors/activity.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
 import { inMinutes, notifyEvent, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
@@ -100,6 +100,7 @@ class Host {
   private suspendWarnT = 0;
   private gpsDeadWarnT = 0;
   private lastActDrainT = 0;
+  private lastActKickT = 0;
   private community = new CommunityBridge(
     () => this.engine?.cfg ?? this.state.config,
     () => {
@@ -375,6 +376,7 @@ class Host {
     }
     this.lastLocRecvT = now;
     this.resolveCarry(samples, now);
+    this.maybeKickActivity(now);
     // Android: dopo un riavvio dell'app (es. aggiornamento) il modulo attività può restare
     // "scollegato" e i risultati finiscono solo nel buffer nativo: li si recupera da qui.
     if (Platform.OS === 'android' && now - this.lastActDrainT > 5000) {
@@ -468,6 +470,15 @@ class Host {
     await this.catchUpActivities();
     this.pump(now);
     await this.flush(true);
+  }
+
+  /** Nessuna attività da Play Services per 90 s (in movimento o all'avvio): si rifà la registrazione, al massimo ogni 10 min. */
+  private maybeKickActivity(now: number): void {
+    if (Platform.OS !== 'android' || !this.state.active || !this.state.startedAt) return;
+    const last = this.state.rates.lastActivityT ?? this.state.startedAt;
+    if (now - last < 90_000 || now - this.lastActKickT < 600_000) return;
+    this.lastActKickT = now;
+    void kickActivity();
   }
 
   private async drainActivities(): Promise<void> {
@@ -583,6 +594,7 @@ class Host {
       this.lastActDrainT = now;
       void this.drainActivities();
     }
+    this.maybeKickActivity(now);
     this.pump(now);
     this.updateRates(now);
     const track = this.state.track;
