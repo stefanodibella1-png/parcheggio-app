@@ -4,6 +4,7 @@
 
 import { AppState, Platform } from 'react-native';
 import { DetectionEngine } from '../../engine/engine.ts';
+import { distanceM } from '../../engine/geo.ts';
 import { DEFAULT_CONFIG, makeConfig, type DetectionConfig } from '../../engine/config.ts';
 import { ReorderBuffer, inputTime, normalizeInputs } from '../../engine/replay.ts';
 import { analyzeTestQuality, realDepartureTime, recurringSpotIds } from '../../engine/analysis.ts';
@@ -249,6 +250,7 @@ class Host {
     this.counts = { location: [], activity: [], motion: [] };
     this.osmTiles = new Set();
     this.osmFailedT = new Map();
+    this.pendingCarry = null;
     this.lastLocRecvT = 0;
     this.startTimers();
     this.startForegroundSensors();
@@ -272,16 +274,19 @@ class Host {
         .filter((s) => s.outcome === 'OPEN' && s.parkedT !== null)
         .sort((a, b) => (b.parkedT ?? 0) - (a.parkedT ?? 0))[0];
       if (!open || now - (open.parkedT ?? 0) > 48 * 3600_000) return;
-      this.push({
-        kind: 'carryOver',
-        t: now,
-        fromTestId: prev.id,
-        parkedT: open.parkedT as number,
-        spot: open.spot,
-        exitedOnFoot: open.exitedOnFoot,
-        gpsLostAtPark: open.gpsLostAtPark,
-      });
-      this.pump(now);
+      // si decide alla prima posizione buona: se sei lontano, l'auto si è mossa senza che il test lo vedesse
+      this.pendingCarry = {
+        until: now + 120_000,
+        input: {
+          kind: 'carryOver',
+          t: now,
+          fromTestId: prev.id,
+          parkedT: open.parkedT as number,
+          spot: open.spot,
+          exitedOnFoot: open.exitedOnFoot,
+          gpsLostAtPark: open.gpsLostAtPark,
+        },
+      };
     } catch {
       // nessun parcheggio da riprendere
     }
@@ -364,6 +369,7 @@ class Host {
       );
     }
     this.lastLocRecvT = now;
+    this.resolveCarry(samples, now);
     const last = samples[samples.length - 1];
     if (last) void this.loadSignals(last.latitude, last.longitude, now);
     this.pump(now);
@@ -479,6 +485,22 @@ class Host {
 
   private rebuilding = false;
   private lastRebuildT = 0;
+  private pendingCarry: { until: number; input: Extract<EngineInput, { kind: 'carryOver' }> } | null = null;
+
+  private resolveCarry(samples: LocationSample[], now: number): void {
+    const pc = this.pendingCarry;
+    if (!pc || !this.engine) return;
+    if (now > pc.until) {
+      this.pendingCarry = null;
+      return;
+    }
+    const good = samples.find((x) => x.accuracy <= 50);
+    if (!good) return;
+    this.pendingCarry = null;
+    if (distanceM(pc.input.spot.pointFinal, good) <= this.engine.cfg.CARRYOVER_MAX_DIST_M) {
+      this.push({ ...pc.input, t: Math.max(pc.input.t, good.t) });
+    }
+  }
 
   /** Rielabora l'intero test dal registro degli input, in ordine di tempo. */
   private async rebuild(lateCount: number): Promise<void> {

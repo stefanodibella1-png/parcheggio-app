@@ -83,6 +83,8 @@ export interface DetectionConfig {
   /** sosta entro questa distanza da un semaforo (OpenStreetMap): il tempo da solo non basta (m) */
   /** app: input arrivati con questo ritardo (s) rispetto all'ultimo elaborato fanno ricostruire il test dal registro */
   LATE_INPUT_REBUILD_S: number;
+  /** app: l'auto del test precedente si riprende solo se la prima posizione è entro questa distanza (m) */
+  CARRYOVER_MAX_DIST_M: number;
   SIGNAL_RADIUS_M: number;
   /** sosta entro questa distanza da un distributore (OpenStreetMap) = rifornimento (m) */
   FUEL_RADIUS_M: number;
@@ -215,6 +217,7 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   GEOCODE_MAX_RETRIES: 5,
 
   LATE_INPUT_REBUILD_S: 20,
+  CARRYOVER_MAX_DIST_M: 2000,
   SIGNAL_RADIUS_M: 35,
   FUEL_RADIUS_M: 40,
   SIGNAL_MIN_PARKING_S: 300,
