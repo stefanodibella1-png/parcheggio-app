@@ -874,8 +874,9 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
           </View>
         </Piece>
         <Piece delay={2300}>
-          <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: space.md, lineHeight: 21, textAlign: 'center' }}>
-            Ti dice dove si libera un posto vicino a te, prima ancora che l'altra auto parta.
+          <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginTop: space.md, textAlign: 'center' }}>Cerchi parcheggio?</Text>
+          <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: 4, lineHeight: 21, textAlign: 'center' }}>
+            Trova un posto libero, minuti prima che si liberi.{'\n'}Chi sta andando via ti avvisa in automatico.
           </Text>
         </Piece>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
