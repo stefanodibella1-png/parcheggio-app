@@ -3,11 +3,11 @@
   "supportUrl": "",
   "zoneTarget": 1000,
   "zoneName": "Catania centro",
-  "priceBase": 3,
-  "priceGold": 10,
-  "pricePlat": 25,
-  "giftsGold": 2,
-  "giftsPlat": 5,
+  "priceBase": 2.9,
+  "priceGold": 9.9,
+  "pricePlat": 19.9,
+  "giftsGold": 3,
+  "giftsPlat": 7,
   "inviteFreeAt": 10,
   "landingUrl": ""
 }

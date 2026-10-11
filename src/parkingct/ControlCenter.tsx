@@ -23,7 +23,7 @@ import {
   type Stats,
 } from './admin.ts';
 import { checkName } from './moderation.ts';
-import { APK_URL, TIER_BADGE, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
+import { APK_URL, TIER_BADGE, euro, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
 
 const RED = '#E53935';
 type Tab = 'numeri' | 'codici' | 'pubblicita' | 'muro' | 'impostazioni';
@@ -337,7 +337,7 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
   useEffect(() => {
     void reload();
   }, [reload]);
-  const gifts = tier === 'oro' ? cfg?.giftsGold ?? 2 : tier === 'platino' ? cfg?.giftsPlat ?? 5 : 0;
+  const gifts = tier === 'oro' ? cfg?.giftsGold ?? 3 : tier === 'platino' ? cfg?.giftsPlat ?? 7 : 0;
   const price = tier === 'oro' ? cfg?.priceGold : tier === 'platino' ? cfg?.pricePlat : cfg?.priceBase;
   return (
     <View style={{ marginTop: space.md }}>
@@ -355,7 +355,7 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
           ))}
         </View>
         <Label dim size={13} style={{ marginTop: 6 }}>
-          {TIER_LABEL[tier]} · da {price ?? '?'} € · {gifts} codici regalo
+          {TIER_LABEL[tier]} · da {price ? euro(price) : '?'} · {gifts} codici regalo
         </Label>
         <Field label="Nome o nota (solo per te)" value={note} onChange={setNote} placeholder="es. Mario Rossi, PayPal 12/10" />
         <Field label="Importo donato (€)" value={amount} onChange={setAmount} keyboard="numeric" />

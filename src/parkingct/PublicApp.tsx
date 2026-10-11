@@ -32,6 +32,7 @@ import type { ParkingSession } from '../../engine/types.ts';
 import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
+  euro,
   TIER_LABEL,
   claimInvite,
   fetchAds,
@@ -496,7 +497,7 @@ function Home({
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
-            Da {cfg?.priceBase ?? 3} € ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
+            Da {euro(cfg?.priceBase ?? 2.9)} ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
             amici.
           </Label>
           <Button title="Diventa fondatore" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
@@ -1147,7 +1148,7 @@ function TierCard({
       <Card style={{ marginTop: space.md, borderColor: highlight ? RED : c.border, borderWidth: highlight ? 2 : 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>{title}</Text>
-          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>da {price} €</Text>
+          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>da {euro(price)}</Text>
         </View>
         {highlight ? (
           <Label size={12} bold color={RED}>
@@ -1187,8 +1188,8 @@ function FounderScreen({
     if (cfg?.supportUrl) void Linking.openURL(cfg.supportUrl);
     else Alert.alert('Quasi pronto', "La raccolta dei sostenitori apre a breve: ti avviseremo nell'app.");
   };
-  const gold = cfg?.giftsGold ?? 2;
-  const plat = cfg?.giftsPlat ?? 5;
+  const gold = cfg?.giftsGold ?? 3;
+  const plat = cfg?.giftsPlat ?? 7;
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg }} keyboardShouldPersistTaps="handled">
       <Pressable onPress={onBack} hitSlop={12}>
@@ -1280,17 +1281,17 @@ function FounderScreen({
         <>
           <TierCard
             title="Fondatore"
-            price={cfg?.priceBase ?? 3}
+            price={cfg?.priceBase ?? 2.9}
             perks={['🎁 ParkingCT gratis per sempre', '⭐ Il titolo di fondatore nell\'app', '🧱 Il tuo nome nel muro dei fondatori']}
             onPress={support}
           />
           <TierCard
             title="Fondatore Oro"
-            price={cfg?.priceGold ?? 10}
+            price={cfg?.priceGold ?? 9.9}
             highlight
             perks={[
               '🎁 ParkingCT gratis per sempre',
-              `🎟️ ${gold} codici regalo: gratis per sempre anche per i tuoi amici`,
+              `🎟️ In più ${gold} codici regalo: gratis per sempre anche per ${gold} amici`,
               '🚗 L\'adesivo ParkingCT per l\'auto',
               '🧱 Nome nel muro dei fondatori, in evidenza',
             ]}
@@ -1298,10 +1299,10 @@ function FounderScreen({
           />
           <TierCard
             title="Fondatore Platino"
-            price={cfg?.pricePlat ?? 25}
+            price={cfg?.pricePlat ?? 19.9}
             perks={[
               '🎁 ParkingCT gratis per sempre',
-              `🎟️ ${plat} codici regalo per famiglia e amici`,
+              `🎟️ In più ${plat} codici regalo per ${plat} tra famiglia e amici`,
               '🚗 L\'adesivo ParkingCT per l\'auto',
               '🏆 Nome in cima al muro dei fondatori',
             ]}

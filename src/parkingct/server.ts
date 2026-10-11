@@ -32,11 +32,11 @@ const DEFAULT_CONFIG: PublicConfig = {
   supportUrl: '',
   zoneTarget: 1000,
   zoneName: '',
-  priceBase: 3,
-  priceGold: 10,
-  pricePlat: 25,
-  giftsGold: 2,
-  giftsPlat: 5,
+  priceBase: 2.9,
+  priceGold: 9.9,
+  pricePlat: 19.9,
+  giftsGold: 3,
+  giftsPlat: 7,
   inviteFreeAt: 10,
   landingUrl: '',
 };
@@ -558,4 +558,9 @@ export async function saveWallEntry(f: FounderInfo, name: string, visible: boole
   if (!r.ok) return 'offline';
   await kvSet('pc:wall', JSON.stringify({ name: clean, visible: clean.length > 0, edits, hidden: false, t: prev?.t ?? Date.now() })).catch(() => {});
   return check === 'review' ? 'review' : 'ok';
+}
+
+/** prezzo in formato italiano: 2,90 € */
+export function euro(n: number): string {
+  return `${n.toLocaleString('it-IT', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })} €`;
 }
