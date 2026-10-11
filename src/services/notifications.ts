@@ -151,6 +151,8 @@ export async function notifyEvent(
 
 /** Aggiorna in silenzio la notifica di ritorno (distanza e minuti). */
 export async function updateReturnNotification(testId: string, session: ParkingSession | null, ri: ReturnInfo | null): Promise<void> {
+  // ParkingCT: la previsione di ritorno serve solo alla community, non va mostrata all'utente
+  if (IS_PUBLIC) return;
   const txt = returnText(session, ri);
   try {
     await Notifications.scheduleNotificationAsync({
@@ -196,6 +198,9 @@ export async function notifyNearbySpot(spot: {
 
 /** Avviso tecnico importante durante il test (es. risparmio energetico). */
 export async function notifyWarning(title: string, body: string, id = 'warning'): Promise<void> {
+  // ParkingCT: niente avvisi tecnici (parlano di "test" e di PARCHEGGIO);
+  // se il telefono mette in pausa l'app, lo dice la schermata principale.
+  if (IS_PUBLIC) return;
   try {
     await Notifications.scheduleNotificationAsync({
       identifier: id,
