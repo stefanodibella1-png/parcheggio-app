@@ -10,6 +10,7 @@ on:
     paths:
       - 'firestore.rules'
       - 'firebase.json'
+      - 'tools/ci/**'
       - '.github/workflows/firebase.yml'
   schedule:
     - cron: '*/15 * * * *'
