@@ -1,6 +1,8 @@
-// ParkingCT: dati sul server (Firestore via REST, nessun account).
-// Inviati: zona (cella di ~5 km), parcheggi anonimi, uso del codice sostenitore.
+// ParkingCT: dati sul server (Firestore via REST, nessun account utente).
+// Inviati: zona (cella di ~5 km), parcheggi anonimi, uso del codice sostenitore,
+// inviti (solo un contatore), visualizzazioni anonime delle pubblicità.
 // Mai nome, numero di telefono o posizione in tempo reale.
+// I numeri complessivi (quanti telefoni, quante zone) li vede solo il control center.
 import { FIREBASE_CONFIG } from '../community/firebaseConfig.ts';
 import { encode } from '../community/geohash.ts';
 import type { ParkingSession } from '../../engine/types.ts';
@@ -12,22 +14,44 @@ export interface PublicConfig {
   supportUrl: string;
   zoneTarget: number;
   zoneName: string;
+  priceBase: number;
+  priceGold: number;
+  pricePlat: number;
+  giftsGold: number;
+  giftsPlat: number;
+  /** amici invitati per avere ParkingCT gratis per sempre (0 = disattivato) */
+  inviteFreeAt: number;
+  landingUrl: string;
 }
 
-const DEFAULT_CONFIG: PublicConfig = { launchAt: Date.parse('2026-12-01T10:00:00+01:00'), supportUrl: '', zoneTarget: 1000, zoneName: '' };
+export const APK_URL = 'https://github.com/stefanodibella1-png/parcheggio-app/releases/latest/download/ParkingCT.apk';
 
-function base(): string | null {
+const DEFAULT_CONFIG: PublicConfig = {
+  launchAt: Date.parse('2026-12-01T10:00:00+01:00'),
+  supportUrl: '',
+  zoneTarget: 1000,
+  zoneName: '',
+  priceBase: 3,
+  priceGold: 10,
+  pricePlat: 25,
+  giftsGold: 2,
+  giftsPlat: 5,
+  inviteFreeAt: 10,
+  landingUrl: '',
+};
+
+export function base(): string | null {
   return FIREBASE_CONFIG ? `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents` : null;
 }
-function key(): string {
+export function key(): string {
   return FIREBASE_CONFIG ? `key=${encodeURIComponent(FIREBASE_CONFIG.apiKey)}` : '';
 }
 
-async function call(url: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Response | null> {
+export async function call(url: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Response | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal, headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) } });
+    return await fetch(url, { ...init, signal: ctrl.signal, headers: { 'Content-Type': 'application/json', ...((init.headers as Record<string, string>) ?? {}) } });
   } catch {
     return null;
   } finally {
@@ -35,10 +59,20 @@ async function call(url: string, init: RequestInit = {}, timeoutMs = 10_000): Pr
   }
 }
 
-type FsVal = { stringValue?: string; doubleValue?: number; integerValue?: string; booleanValue?: boolean; nullValue?: null };
-const num = (v: FsVal | undefined): number | null => (v?.doubleValue ?? (v?.integerValue ? Number(v.integerValue) : null)) ?? null;
+export type FsVal = {
+  stringValue?: string;
+  doubleValue?: number;
+  integerValue?: string;
+  booleanValue?: boolean;
+  nullValue?: null;
+  arrayValue?: { values?: FsVal[] };
+  timestampValue?: string;
+};
+export const num = (v: FsVal | undefined): number | null => (v?.doubleValue ?? (v?.integerValue ? Number(v.integerValue) : null)) ?? null;
+export const str = (v: FsVal | undefined): string | null => v?.stringValue ?? null;
+export const strList = (v: FsVal | undefined): string[] => (v?.arrayValue?.values ?? []).map((x) => x.stringValue ?? '').filter(Boolean);
 
-/** Configurazione del lancio (data, link per sostenere, obiettivo per zona). Usa l'ultima salvata se offline. */
+/** Configurazione del lancio (data, link per sostenere, livelli). Usa l'ultima salvata se offline. */
 export async function getConfig(): Promise<PublicConfig> {
   const b = base();
   if (b) {
@@ -47,16 +81,23 @@ export async function getConfig(): Promise<PublicConfig> {
       const f = ((await r.json()) as { fields: Record<string, FsVal> }).fields;
       const cfg: PublicConfig = {
         launchAt: num(f.launchAt) ?? DEFAULT_CONFIG.launchAt,
-        supportUrl: f.supportUrl?.stringValue ?? '',
-        zoneTarget: num(f.zoneTarget) ?? 1000,
-        zoneName: f.zoneName?.stringValue ?? '',
+        supportUrl: str(f.supportUrl) ?? '',
+        zoneTarget: num(f.zoneTarget) ?? DEFAULT_CONFIG.zoneTarget,
+        zoneName: str(f.zoneName) ?? '',
+        priceBase: num(f.priceBase) ?? DEFAULT_CONFIG.priceBase,
+        priceGold: num(f.priceGold) ?? DEFAULT_CONFIG.priceGold,
+        pricePlat: num(f.pricePlat) ?? DEFAULT_CONFIG.pricePlat,
+        giftsGold: num(f.giftsGold) ?? DEFAULT_CONFIG.giftsGold,
+        giftsPlat: num(f.giftsPlat) ?? DEFAULT_CONFIG.giftsPlat,
+        inviteFreeAt: num(f.inviteFreeAt) ?? DEFAULT_CONFIG.inviteFreeAt,
+        landingUrl: str(f.landingUrl) ?? '',
       };
       await kvSet('pc:config', JSON.stringify(cfg)).catch(() => {});
       return cfg;
     }
   }
   const saved = await kvGet('pc:config').catch(() => null);
-  return saved ? (JSON.parse(saved) as PublicConfig) : DEFAULT_CONFIG;
+  return saved ? { ...DEFAULT_CONFIG, ...(JSON.parse(saved) as Partial<PublicConfig>) } : DEFAULT_CONFIG;
 }
 
 export async function deviceId(): Promise<string> {
@@ -69,38 +110,59 @@ export async function deviceId(): Promise<string> {
 }
 
 /** Registra il telefono nella sua zona (cella geohash di ~5 km). */
-export async function registerDevice(lat: number, lon: number, founder: boolean): Promise<string | null> {
+export async function registerDevice(lat: number, lon: number, founder: boolean, tier: string, version: string): Promise<string | null> {
   const b = base();
   if (!b) return null;
   const zone = encode(lat, lon, 5);
   const id = await deviceId();
+  let first = Number((await kvGet('pc:first').catch(() => null)) ?? 0);
+  if (!first) {
+    first = Date.now();
+    await kvSet('pc:first', String(first)).catch(() => {});
+  }
   const r = await call(`${b}/devices/${id}?${key()}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fields: { zone: { stringValue: zone }, t: { doubleValue: Date.now() }, founder: { booleanValue: founder } } }),
+    body: JSON.stringify({
+      fields: {
+        zone: { stringValue: zone },
+        t: { doubleValue: Date.now() },
+        founder: { booleanValue: founder },
+        first: { doubleValue: first },
+        tier: { stringValue: tier },
+        v: { stringValue: version },
+      },
+    }),
   });
   if (r?.ok) await kvSet('pc:zone', zone).catch(() => {});
   return r?.ok ? zone : null;
 }
 
-/** Quanti telefoni ParkingCT ci sono nella zona. */
-export async function zoneCount(zone: string): Promise<number | null> {
-  const b = base();
-  if (!b) return null;
-  const r = await call(`${b}:runAggregationQuery?${key()}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      structuredAggregationQuery: {
-        structuredQuery: { from: [{ collectionId: 'devices' }], where: { fieldFilter: { field: { fieldPath: 'zone' }, op: 'EQUAL', value: { stringValue: zone } } } },
-        aggregations: [{ alias: 'n', count: {} }],
-      },
-    }),
-  });
-  if (!r?.ok) return null;
-  const j = (await r.json()) as { result?: { aggregateFields?: { n?: FsVal } } }[];
-  return num(j?.[0]?.result?.aggregateFields?.n) ?? 0;
+// ---------------------------------------------------------------------------------------
+// sostenitori fondatori
+
+export type Tier = 'base' | 'oro' | 'platino' | 'regalo' | 'amici';
+
+export const TIER_LABEL: Record<Tier, string> = {
+  base: 'Sostenitore fondatore',
+  oro: 'Fondatore Oro',
+  platino: 'Fondatore Platino',
+  regalo: 'Fondatore (regalo di un amico)',
+  amici: 'Fondatore ad honorem',
+};
+
+export interface FounderInfo {
+  code: string;
+  t: number;
+  tier: Tier;
+  gifts: string[];
 }
 
 export type RedeemResult = 'ok' | 'invalid' | 'used' | 'offline';
+
+export function prettyCode(code: string): string {
+  const c = normalizeCode(code);
+  return `${c.slice(0, 4)}-${c.slice(4, 8)}-${c.slice(8)}`;
+}
 
 /** Verifica e usa un codice sostenitore. */
 export async function redeemCode(input: string): Promise<RedeemResult> {
@@ -115,7 +177,7 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
   if (!get.ok) return 'offline';
   const doc = (await get.json()) as { fields: Record<string, FsVal> };
   const id = await deviceId();
-  const usedBy = doc.fields.usedBy?.stringValue ?? null;
+  const usedBy = str(doc.fields.usedBy);
   if (usedBy && usedBy !== id) return 'used';
   if (!usedBy) {
     const up = await call(`${b}/codes/${h}?updateMask.fieldPaths=usedBy&updateMask.fieldPaths=usedAt&${key()}`, {
@@ -125,14 +187,182 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
     if (!up) return 'offline';
     if (!up.ok) return 'used';
   }
-  await kvSet('pc:founder', JSON.stringify({ code: `${code.slice(0, 4)}-${code.slice(4, 8)}-${code.slice(8)}`, t: Date.now() })).catch(() => {});
+  const tier = (str(doc.fields.tier) as Tier | null) ?? 'base';
+  const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode) };
+  await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
   return 'ok';
 }
 
-export async function founderInfo(): Promise<{ code: string; t: number } | null> {
+export async function founderInfo(): Promise<FounderInfo | null> {
   const s = await kvGet('pc:founder').catch(() => null);
-  return s ? (JSON.parse(s) as { code: string; t: number }) : null;
+  if (!s) return null;
+  const f = JSON.parse(s) as Partial<FounderInfo>;
+  return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [] };
 }
+
+/** Quali codici regalo sono già stati usati dagli amici. */
+export async function giftStatus(gifts: string[]): Promise<Record<string, boolean>> {
+  const b = base();
+  const out: Record<string, boolean> = {};
+  if (!b) return out;
+  await Promise.all(
+    gifts.map(async (g) => {
+      const r = await call(`${b}/codes/${sha256Hex(normalizeCode(g))}?${key()}`);
+      if (r?.ok) {
+        const d = (await r.json()) as { fields: Record<string, FsVal> };
+        out[g] = !!str(d.fields.usedBy);
+      }
+    }),
+  );
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------
+// inviti: ogni telefono ha un codice amico; chi installa lo inserisce una volta
+
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+export async function myInviteCode(): Promise<string> {
+  const h = sha256Hex(await deviceId());
+  let out = '';
+  for (let i = 0; i < 6; i++) out += INVITE_ALPHABET[parseInt(h.slice(i * 2, i * 2 + 2), 16) % INVITE_ALPHABET.length];
+  return out;
+}
+
+export function normalizeInvite(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+/** Quanti amici hanno usato il mio codice. null = offline. */
+export async function myInviteCount(): Promise<number | null> {
+  const b = base();
+  if (!b) return null;
+  const r = await call(`${b}/invites/${await myInviteCode()}?${key()}`);
+  if (!r) return null;
+  if (r.status === 404) return 0;
+  if (!r.ok) return null;
+  return num(((await r.json()) as { fields: Record<string, FsVal> }).fields.n) ?? 0;
+}
+
+export type InviteResult = 'ok' | 'self' | 'already' | 'invalid' | 'offline';
+
+/** Il nuovo utente conferma chi l'ha invitato (una sola volta per telefono). */
+export async function claimInvite(input: string): Promise<InviteResult> {
+  const b = base();
+  const code = normalizeInvite(input);
+  if (code.length < 4) return 'invalid';
+  if ((await kvGet('pc:invitedBy').catch(() => null)) !== null) return 'already';
+  if (code === (await myInviteCode())) return 'self';
+  if (!b) return 'offline';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await call(`${b}/invites/${code}?${key()}`);
+    if (!r) return 'offline';
+    let res: Response | null;
+    if (r.status === 404) {
+      res = await call(`${b}/invites/${code}?currentDocument.exists=false&${key()}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { n: { integerValue: '1' }, t: { doubleValue: Date.now() } } }),
+      });
+    } else if (r.ok) {
+      const d = (await r.json()) as { fields: Record<string, FsVal>; updateTime: string };
+      const n = num(d.fields.n) ?? 0;
+      res = await call(`${b}/invites/${code}?currentDocument.updateTime=${encodeURIComponent(d.updateTime)}&${key()}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fields: { n: { integerValue: String(n + 1) }, t: { doubleValue: Date.now() } } }),
+      });
+    } else return 'offline';
+    if (!res) return 'offline';
+    if (res.ok) {
+      await kvSet('pc:invitedBy', code).catch(() => {});
+      return 'ok';
+    }
+    // qualcun altro ha aggiornato nello stesso momento: riprova
+  }
+  return 'offline';
+}
+
+// ---------------------------------------------------------------------------------------
+// pubblicità
+
+export interface Ad {
+  id: string;
+  sponsor: string;
+  title: string;
+  text: string;
+  cta: string;
+  url: string;
+  image: string;
+  /** zona geohash5 ('' = tutte) */
+  zone: string;
+  active: boolean;
+  until: number;
+  weight: number;
+}
+
+export function adFromDoc(name: string, f: Record<string, FsVal>): Ad {
+  return {
+    id: name.split('/').pop() ?? '',
+    sponsor: str(f.sponsor) ?? '',
+    title: str(f.title) ?? '',
+    text: str(f.text) ?? '',
+    cta: str(f.cta) ?? '',
+    url: str(f.url) ?? '',
+    image: str(f.image) ?? '',
+    zone: str(f.zone) ?? '',
+    active: f.active?.booleanValue ?? false,
+    until: num(f.until) ?? 0,
+    weight: num(f.weight) ?? 1,
+  };
+}
+
+/** Le pubblicità attive per la zona del telefono (salvate per l'uso offline). */
+export async function fetchAds(zone: string | null): Promise<Ad[]> {
+  const b = base();
+  const now = Date.now();
+  const keep = (a: Ad) => a.active && a.title && (!a.until || a.until > now) && (!a.zone || (zone !== null && zone.startsWith(a.zone)));
+  if (b) {
+    const r = await call(`${b}/ads?pageSize=100&${key()}`);
+    if (r?.ok) {
+      const j = (await r.json()) as { documents?: { name: string; fields: Record<string, FsVal> }[] };
+      const all = (j.documents ?? []).map((d) => adFromDoc(d.name, d.fields ?? {}));
+      await kvSet('pc:ads', JSON.stringify(all)).catch(() => {});
+      return all.filter(keep);
+    }
+  }
+  const saved = await kvGet('pc:ads').catch(() => null);
+  return saved ? (JSON.parse(saved) as Ad[]).filter(keep) : [];
+}
+
+export function pickAd(ads: Ad[]): Ad | null {
+  const tot = ads.reduce((s, a) => s + Math.max(0, a.weight || 1), 0);
+  if (!tot) return null;
+  let r = Math.random() * tot;
+  for (const a of ads) {
+    r -= Math.max(0, a.weight || 1);
+    if (r <= 0) return a;
+  }
+  return ads[ads.length - 1];
+}
+
+/** Visualizzazione (al massimo una al giorno per pubblicità) o tocco. */
+export async function logAdEvent(ad: Ad, kind: 'view' | 'click', zone: string | null): Promise<void> {
+  const b = base();
+  if (!b) return;
+  if (kind === 'view') {
+    const day = new Date().toISOString().slice(0, 10);
+    const k = `pc:adview:${ad.id}`;
+    if ((await kvGet(k).catch(() => null)) === day) return;
+    await kvSet(k, day).catch(() => {});
+  }
+  await call(`${b}/adEvents?${key()}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      fields: { adId: { stringValue: ad.id }, kind: { stringValue: kind }, t: { doubleValue: Date.now() }, zone: { stringValue: zone ?? '' } },
+    }),
+  });
+}
+
+// ---------------------------------------------------------------------------------------
 
 /** Parcheggio concluso, in forma anonima: serve a costruire la mappa dei posti veri. */
 export async function uploadParking(s: ParkingSession): Promise<void> {

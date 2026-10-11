@@ -4,6 +4,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Control center segreto: solo l'account del proprietario, con email verificata.
+    // (nel file c'è solo l'impronta SHA-256 dell'email, non l'email)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && hashing.sha256(request.auth.token.email.lower()).toHexString().lower()
+           == 'de88b4d414e4020545351bf4badea9b14f78bb6baeddd03e408ec6341c05af07';
+    }
+
     // posti che si liberano (community)
     match /spots/{id} {
       allow read: if true;
@@ -34,14 +43,14 @@ service cloud.firestore {
     // ParkingCT: configurazione del lancio (scritta solo dal server)
     match /config/{id} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
-    // ParkingCT: telefoni per zona (cella geohash5, ~5 km), per il contatore "N su 1000"
+    // ParkingCT: telefoni per zona (cella geohash5, ~5 km). I numeri li vede solo il control center.
     match /devices/{id} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow create, update: if
-        request.resource.data.keys().hasOnly(['zone', 't', 'founder'])
+        request.resource.data.keys().hasOnly(['zone', 't', 'founder', 'first', 'tier', 'v'])
         && request.resource.data.zone is string
         && request.resource.data.zone.size() == 5
         && request.resource.data.t is number
@@ -50,19 +59,56 @@ service cloud.firestore {
 
     // ParkingCT: codici dei sostenitori fondatori (id = impronta SHA-256 del codice).
     // Si legge solo il singolo codice (impossibile elencarli); si usa una volta sola.
+    // Livelli: base, oro, platino (con codici regalo), regalo.
     match /codes/{hash} {
       allow get: if true;
-      allow list, create, delete: if false;
-      allow update: if
+      allow list, create, delete: if isAdmin();
+      allow update: if isAdmin() || (
         resource.data.usedBy == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
         && request.resource.data.usedBy is string
-        && request.resource.data.usedAt is number;
+        && request.resource.data.usedAt is number);
+    }
+
+    // ParkingCT: registro dei codici generati dal control center (con il codice in chiaro)
+    match /adminCodes/{hash} {
+      allow read, write: if isAdmin();
+    }
+
+    // ParkingCT: pubblicità (scritte dal control center, lette dall'app)
+    match /ads/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ParkingCT: visualizzazioni e tocchi delle pubblicità (anonimi)
+    match /adEvents/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly(['adId', 'kind', 't', 'zone'])
+        && request.resource.data.adId is string
+        && request.resource.data.kind in ['view', 'click']
+        && request.resource.data.t is number;
+    }
+
+    // ParkingCT: amici invitati (id = codice invito di chi invita). Ogni nuovo telefono aggiunge 1.
+    match /invites/{code} {
+      allow get: if true;
+      allow list, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly(['n', 't'])
+        && request.resource.data.n == 1
+        && request.resource.data.t is number
+        && code.size() <= 12;
+      allow update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['n', 't'])
+        && request.resource.data.n == resource.data.n + 1
+        && request.resource.data.t is number);
     }
 
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)
     match /parkings/{id} {
-      allow read: if false;
+      allow read: if isAdmin();
       allow create: if
         request.resource.data.keys().hasOnly(['latitude', 'longitude', 'geohash7', 'parkedT', 'durationS',
           'outcome', 'exitedOnFoot', 'quality', 'atFuel', 'gpsLost', 'deviceId'])

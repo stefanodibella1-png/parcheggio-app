@@ -8,6 +8,7 @@ import {
   BackHandler,
   Dimensions,
   Easing,
+  Image,
   Linking,
   Modal,
   Pressable,
@@ -29,11 +30,29 @@ import { fmtDistance, fmtDuration, fmtTime } from '../ui/format.ts';
 import { space, usePalette } from '../ui/theme.ts';
 import type { ParkingSession } from '../../engine/types.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
-import { founderInfo, getConfig, redeemCode, registerDevice, zoneCount, type PublicConfig } from './server.ts';
+import {
+  APK_URL,
+  TIER_LABEL,
+  claimInvite,
+  fetchAds,
+  founderInfo,
+  getConfig,
+  giftStatus,
+  logAdEvent,
+  myInviteCode,
+  myInviteCount,
+  pickAd,
+  redeemCode,
+  registerDevice,
+  type Ad,
+  type FounderInfo,
+  type PublicConfig,
+} from './server.ts';
+import { ControlCenter } from './ControlCenter.tsx';
 
 const RED = '#E53935';
 
-type Screen = 'home' | 'founder' | 'info';
+type Screen = 'home' | 'founder' | 'info' | 'admin';
 
 // ---------------------------------------------------------------------------------------
 // radice
@@ -44,7 +63,7 @@ export function PublicApp() {
   const [onboarded, setOnboarded] = useState(false);
   const [screen, setScreen] = useState<Screen>('home');
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
-  const [founder, setFounder] = useState<{ code: string; t: number } | null>(null);
+  const [founder, setFounder] = useState<FounderInfo | null>(null);
   const [party, setParty] = useState<null | 'launch' | 'founder'>(null);
 
   const refreshCfg = useCallback(async () => {
@@ -118,7 +137,21 @@ export function PublicApp() {
       />
     );
   else if (screen === 'info') body = <InfoScreen onBack={() => setScreen('home')} />;
-  else body = <Home cfg={cfg} founder={founder} go={setScreen} />;
+  else if (screen === 'admin') body = <ControlCenter cfg={cfg} onBack={() => setScreen('home')} />;
+  else
+    body = (
+      <Home
+        cfg={cfg}
+        founder={founder}
+        go={setScreen}
+        onInviteReward={async () => {
+          const info: FounderInfo = { code: 'INVITI', t: Date.now(), tier: 'amici', gifts: [] };
+          await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
+          setFounder(info);
+          setParty('founder');
+        }}
+      />
+    );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top', 'left', 'right', 'bottom']}>
@@ -149,6 +182,8 @@ function Onboarding({ onDone }: { onDone: () => void }) {
   const c = usePalette();
   const [step, setStep] = useState(0);
   const [consent, setConsent] = useState(false);
+  const [friend, setFriend] = useState('');
+  const [friendMsg, setFriendMsg] = useState<string | null>(null);
   const [items, setItems] = useState<CheckItem[]>([]);
   const refresh = useCallback(() => {
     readiness()
@@ -215,6 +250,29 @@ function Onboarding({ onDone }: { onDone: () => void }) {
           ) : null}
         </Card>
       ))}
+      <Card style={{ marginTop: space.lg }}>
+        <Label bold>Ti ha invitato un amico?</Label>
+        <Label dim size={14}>
+          Scrivi il suo codice amico (facoltativo): lo aiuti ad avere ParkingCT gratis per sempre.
+        </Label>
+        <TextInput
+          value={friend}
+          onChangeText={(t) => {
+            setFriend(t.toUpperCase());
+            setFriendMsg(null);
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="es. K7PX3M"
+          placeholderTextColor={c.textDim}
+          style={{ marginTop: space.sm, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: space.md, color: c.text, fontSize: 18, letterSpacing: 2, textAlign: 'center' }}
+        />
+        {friendMsg ? (
+          <Label size={14} style={{ marginTop: 6 }} color={RED}>
+            {friendMsg}
+          </Label>
+        ) : null}
+      </Card>
       <Pressable onPress={() => setConsent(!consent)} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: space.lg }}>
         <Text style={{ fontSize: 22, marginRight: space.sm }}>{consent ? '☑️' : '⬜️'}</Text>
         <Label size={14} style={{ flex: 1 }}>
@@ -222,7 +280,22 @@ function Onboarding({ onDone }: { onDone: () => void }) {
           liberano. Posso disinstallare l'app in qualsiasi momento.
         </Label>
       </Pressable>
-      <Button title="Fatto" style={{ marginTop: space.lg, backgroundColor: RED }} disabled={!consent} onPress={onDone} />
+      <Button
+        title="Fatto"
+        style={{ marginTop: space.lg, backgroundColor: RED }}
+        disabled={!consent}
+        onPress={async () => {
+          if (friend.trim()) {
+            const r = await claimInvite(friend);
+            if (r === 'invalid' || r === 'self') {
+              setFriendMsg(r === 'self' ? 'Questo è il tuo codice: serve quello del tuo amico.' : 'Codice amico non valido.');
+              return;
+            }
+            if (r === 'offline') await kvSet('pc:pendingInvite', friend).catch(() => {});
+          }
+          onDone();
+        }}
+      />
       {!allOk ? (
         <Label dim size={13} style={{ marginTop: space.sm, textAlign: 'center' }}>
           Puoi continuare anche senza tutti i permessi: alcune funzioni saranno limitate.
@@ -235,28 +308,57 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 // ---------------------------------------------------------------------------------------
 // schermata principale
 
-function Home({ cfg, founder, go }: { cfg: PublicConfig | null; founder: { code: string } | null; go: (s: Screen) => void }) {
+function Home({
+  cfg,
+  founder,
+  go,
+  onInviteReward,
+}: {
+  cfg: PublicConfig | null;
+  founder: FounderInfo | null;
+  go: (s: Screen) => void;
+  onInviteReward: () => void;
+}) {
   const c = usePalette();
   const s = useHost();
   const now = useNow();
-  const [zone, setZone] = useState<{ n: number | null } | null>(null);
+  const [zone, setZone] = useState<string | null>(null);
   const [upd, setUpd] = useState(false);
+  const [ad, setAd] = useState<Ad | null>(null);
+  const [invites, setInvites] = useState<number | null>(null);
+  const taps = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
 
   useEffect(() => {
     void updateAvailable().then(setUpd);
     void (async () => {
       const last = (await kvGet('pc:zoneT').catch(() => null)) ?? '0';
       let z = await kvGet('pc:zone').catch(() => null);
-      if (!z || Date.now() - Number(last) > 24 * 3600_000) {
+      if (!z || Date.now() - Number(last) > 12 * 3600_000) {
         const pos = await Location.getLastKnownPositionAsync().catch(() => null);
         if (pos) {
-          z = await registerDevice(pos.coords.latitude, pos.coords.longitude, !!founder);
+          z = (await registerDevice(pos.coords.latitude, pos.coords.longitude, !!founder, founder?.tier ?? '', shortVersion())) ?? z;
           await kvSet('pc:zoneT', String(Date.now())).catch(() => {});
         }
       }
-      if (z) setZone({ n: await zoneCount(z) });
+      setZone(z);
+      const ads = await fetchAds(z);
+      const a = pickAd(ads);
+      setAd(a);
+      if (a) void logAdEvent(a, 'view', z);
+      // invito rimasto in sospeso (offline durante il benvenuto)
+      const pending = await kvGet('pc:pendingInvite').catch(() => null);
+      if (pending) {
+        const r = await claimInvite(pending);
+        if (r !== 'offline') await kvSet('pc:pendingInvite', '').catch(() => {});
+      }
+      const n = await myInviteCount();
+      setInvites(n);
     })();
   }, [founder]);
+
+  useEffect(() => {
+    if (!founder && cfg && cfg.inviteFreeAt > 0 && invites !== null && invites >= cfg.inviteFreeAt) onInviteReward();
+  }, [founder, cfg, invites, onInviteReward]);
 
   const launched = cfg ? now >= cfg.launchAt : false;
   const session = s.session;
@@ -267,20 +369,34 @@ function Home({ cfg, founder, go }: { cfg: PublicConfig | null; founder: { code:
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => {
+            // accesso segreto: 7 tocchi sul logo entro 4 secondi
+            const t = Date.now();
+            taps.current = t - taps.current.t > 4000 ? { n: 1, t } : { n: taps.current.n + 1, t: taps.current.t };
+            if (taps.current.n >= 7) {
+              taps.current = { n: 0, t: 0 };
+              go('admin');
+            }
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+        >
           <Text style={{ fontSize: 30 }}>🚗</Text>
           <Text style={{ color: c.text, fontSize: 28, fontWeight: '800', marginLeft: space.sm }}>
             Parking<Text style={{ color: RED }}>CT</Text>
           </Text>
-        </View>
+        </Pressable>
         <Pressable onPress={() => go('info')} hitSlop={12}>
-          <Text style={{ fontSize: 24 }}>ⓘ</Text>
+          <Text style={{ fontSize: 24, color: c.text }}>ⓘ</Text>
         </Pressable>
       </View>
       {founder ? (
-        <Label size={13} color={RED} bold style={{ marginTop: 2 }}>
-          ⭐ Sostenitore fondatore
-        </Label>
+        <Pressable onPress={() => go('founder')}>
+          <Label size={13} color={RED} bold style={{ marginTop: 2 }}>
+            ⭐ {TIER_LABEL[founder.tier]}
+            {founder.gifts.length ? ` · ${founder.gifts.length} codici regalo da donare ›` : ''}
+          </Label>
+        </Pressable>
       ) : null}
 
       {upd ? (
@@ -331,19 +447,24 @@ function Home({ cfg, founder, go }: { cfg: PublicConfig | null; founder: { code:
           <CommunityCard community={s.community} now={now} />
         </View>
       ) : cfg ? (
-        <LaunchCard cfg={cfg} now={now} count={zone?.n ?? null} />
+        <LaunchCard cfg={cfg} now={now} />
       ) : null}
+
+      {ad ? <AdCard ad={ad} zone={zone} /> : null}
 
       {/* sostenitore */}
       {!founder ? (
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
-            Sostieni ParkingCT con pochi euro: ricevi un codice personale e, al lancio, l'app si attiva per te gratis per sempre.
+            Da {cfg?.priceBase ?? 3} € ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
+            amici.
           </Label>
-          <Button title="Scopri di più" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
+          <Button title="Diventa fondatore" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
         </Card>
       ) : null}
+
+      <InviteCard cfg={cfg} count={invites} founder={!!founder} />
     </ScrollView>
   );
 }
@@ -383,11 +504,10 @@ function CarHere({ session, distanceM, now }: { session: ParkingSession; distanc
   );
 }
 
-function LaunchCard({ cfg, now, count }: { cfg: PublicConfig; now: number; count: number | null }) {
+function LaunchCard({ cfg, now }: { cfg: PublicConfig; now: number }) {
   const c = usePalette();
   const days = Math.max(0, Math.ceil((cfg.launchAt - now) / 86_400_000));
   const date = new Date(cfg.launchAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-  const pct = count === null ? 0 : Math.min(100, (count / cfg.zoneTarget) * 100);
   return (
     <Card style={{ marginTop: space.md }}>
       <Label size={13} dim bold>
@@ -398,36 +518,136 @@ function LaunchCard({ cfg, now, count }: { cfg: PublicConfig; now: number; count
         {days > 0 ? ` · tra ${days} giorn${days === 1 ? 'o' : 'i'}` : ''}
       </Text>
       <Label dim style={{ marginTop: 4 }}>
-        Fino ad allora ParkingCT impara i parcheggi della città. Più siamo nella tua zona, più posti vedrai.
+        Fino ad allora ParkingCT impara i parcheggi della città. Più siamo nella tua zona, più posti vedrai: invita chi parcheggia vicino a te.
       </Label>
-      <View style={{ marginTop: space.md }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Label size={14}>{cfg.zoneName ? `Nella zona ${cfg.zoneName}` : 'Nella tua zona'}</Label>
-          <Label size={14} bold>
-            {count === null ? '…' : count} su {cfg.zoneTarget}
+    </Card>
+  );
+}
+
+function inviteMessage(cfg: PublicConfig | null, code: string): string {
+  return (
+    `Uso ParkingCT: ricorda dove parcheggi e ti avvisa quando un posto si libera vicino a te, senza girare a vuoto. È gratis.\n\n` +
+    `Scaricala: ${cfg?.landingUrl || APK_URL}\n` +
+    `Al primo avvio inserisci il mio codice amico: ${code}`
+  );
+}
+
+function InviteCard({ cfg, count, founder }: { cfg: PublicConfig | null; count: number | null; founder: boolean }) {
+  const c = usePalette();
+  const [code, setCode] = useState('');
+  useEffect(() => {
+    void myInviteCode().then(setCode);
+  }, []);
+  const goal = cfg?.inviteFreeAt ?? 10;
+  const n = count ?? 0;
+  const level = n >= goal ? 'Fondatore ad honorem' : n >= 3 ? 'Ambasciatore' : n >= 1 ? 'Apripista' : null;
+  return (
+    <Card style={{ marginTop: space.md }}>
+      <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>🤝 Invita i tuoi amici</Text>
+      <Label dim style={{ marginTop: 4 }}>
+        {founder || goal <= 0
+          ? 'Più amici nella tua zona = più posti segnalati per tutti.'
+          : `Porta ${goal} amici su ParkingCT e per te è gratis per sempre, senza pagare nulla.`}
+      </Label>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.md }}>
+        <View>
+          <Label size={13} dim>
+            Il tuo codice amico
+          </Label>
+          <Text selectable style={{ color: c.text, fontSize: 24, fontWeight: '800', letterSpacing: 3 }}>
+            {code || '……'}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: RED, fontSize: 24, fontWeight: '800' }}>{count === null ? '–' : n}</Text>
+          <Label size={13} dim>
+            amici invitati
           </Label>
         </View>
-        <View style={{ height: 10, backgroundColor: c.cardAlt, borderRadius: 5, marginTop: 6, overflow: 'hidden' }}>
-          <View style={{ width: `${pct}%`, height: 10, backgroundColor: RED }} />
-        </View>
       </View>
-      <Button
-        small
-        variant="ghost"
-        title="Invita chi parcheggia vicino a te"
-        style={{ marginTop: space.md }}
-        onPress={() =>
-          Share.share({
-            message: 'Sto usando ParkingCT: ricorda dove parcheggi e avvisa quando un posto si libera vicino a te. Scaricala gratis: https://github.com/stefanodibella1-png/parcheggio-app/releases/latest/download/ParkingCT.apk',
-          })
-        }
-      />
+      {!founder && goal > 0 ? (
+        <View style={{ height: 8, backgroundColor: c.cardAlt, borderRadius: 4, marginTop: space.sm, overflow: 'hidden' }}>
+          <View style={{ width: `${Math.min(100, (n / goal) * 100)}%`, height: 8, backgroundColor: RED }} />
+        </View>
+      ) : null}
+      {level ? (
+        <Label size={14} bold color={RED} style={{ marginTop: space.sm }}>
+          🏅 {level}
+        </Label>
+      ) : null}
+      <Label dim size={13} style={{ marginTop: space.sm }}>
+        1 amico: Apripista · 3 amici: Ambasciatore{goal > 0 ? ` · ${goal} amici: gratis per sempre` : ''}
+      </Label>
+      <Button title="Invita su WhatsApp o altro" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => Share.share({ message: inviteMessage(cfg, code) })} />
     </Card>
+  );
+}
+
+function AdCard({ ad, zone }: { ad: Ad; zone: string | null }) {
+  const c = usePalette();
+  const open = () => {
+    void logAdEvent(ad, 'click', zone);
+    if (ad.url) void Linking.openURL(ad.url).catch(() => {});
+  };
+  return (
+    <Pressable onPress={open} style={{ marginTop: space.md }}>
+      <Card>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Label size={12} dim bold>
+            SPONSORIZZATO{ad.sponsor ? ` · ${ad.sponsor.toUpperCase()}` : ''}
+          </Label>
+        </View>
+        {ad.image ? <Image source={{ uri: ad.image }} style={{ width: '100%', height: 140, borderRadius: 12, marginTop: space.sm }} resizeMode="cover" /> : null}
+        <Text style={{ color: c.text, fontSize: 18, fontWeight: '700', marginTop: space.sm }}>{ad.title}</Text>
+        {ad.text ? (
+          <Label dim style={{ marginTop: 4 }}>
+            {ad.text}
+          </Label>
+        ) : null}
+        {ad.url ? <Button small variant="ghost" title={ad.cta || 'Scopri'} style={{ marginTop: space.md }} onPress={open} /> : null}
+      </Card>
+    </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------------------
 // sostenitore fondatore
+
+function TierCard({
+  title,
+  price,
+  perks,
+  highlight,
+  onPress,
+}: {
+  title: string;
+  price: number;
+  perks: string[];
+  highlight?: boolean;
+  onPress: () => void;
+}) {
+  const c = usePalette();
+  return (
+    <Pressable onPress={onPress}>
+      <Card style={{ marginTop: space.md, borderColor: highlight ? RED : c.border, borderWidth: highlight ? 2 : 1 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>{title}</Text>
+          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>da {price} €</Text>
+        </View>
+        {highlight ? (
+          <Label size={12} bold color={RED}>
+            IL PIÙ SCELTO
+          </Label>
+        ) : null}
+        {perks.map((p) => (
+          <Label key={p} style={{ marginTop: 4 }}>
+            {p}
+          </Label>
+        ))}
+      </Card>
+    </Pressable>
+  );
+}
 
 function FounderScreen({
   cfg,
@@ -436,7 +656,7 @@ function FounderScreen({
   onRedeemed,
 }: {
   cfg: PublicConfig | null;
-  founder: { code: string } | null;
+  founder: FounderInfo | null;
   onBack: () => void;
   onRedeemed: () => void;
 }) {
@@ -444,6 +664,16 @@ function FounderScreen({
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [used, setUsed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (founder?.gifts.length) void giftStatus(founder.gifts).then(setUsed);
+  }, [founder]);
+  const support = () => {
+    if (cfg?.supportUrl) void Linking.openURL(cfg.supportUrl);
+    else Alert.alert('Quasi pronto', "La raccolta dei sostenitori apre a breve: ti avviseremo nell'app.");
+  };
+  const gold = cfg?.giftsGold ?? 2;
+  const plat = cfg?.giftsPlat ?? 5;
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg }} keyboardShouldPersistTaps="handled">
       <Pressable onPress={onBack} hitSlop={12}>
@@ -454,88 +684,149 @@ function FounderScreen({
       <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm }}>
         ParkingCT nasce a Catania, da un catanese. Con un piccolo contributo l'aiuti a partire e la usi gratis per sempre.
       </Label>
-      <Card style={{ marginTop: space.lg }}>
-        <Label bold>Cosa ricevi</Label>
-        <Label style={{ marginTop: 6 }}>🎁 ParkingCT gratis per sempre</Label>
-        <Label style={{ marginTop: 4 }}>⭐ Il titolo di fondatore nell'app</Label>
-        <Label style={{ marginTop: 4 }}>🧱 Il tuo nome nel muro dei fondatori</Label>
-        <Label style={{ marginTop: 4 }}>🚗 L'adesivo ParkingCT per l'auto</Label>
-        <Label dim size={13} style={{ marginTop: 8 }}>
-          Dopo il contributo ricevi il tuo codice personale. Al lancio ParkingCT te lo chiede: lo inserisci una volta e l'app resta attiva
-          per sempre. Puoi inserirlo anche subito qui sotto.
-        </Label>
-      </Card>
+
       {founder ? (
-        <Card style={{ marginTop: space.md }}>
-          <Label bold color={RED}>
-            Sei già sostenitore fondatore. Grazie! 🎉
-          </Label>
-          <Label dim style={{ marginTop: 4 }}>Codice: {founder.code}</Label>
-        </Card>
-      ) : (
         <>
-          <Button
-            title="Sostieni ParkingCT"
-            style={{ marginTop: space.lg, backgroundColor: RED }}
-            onPress={() => {
-              if (cfg?.supportUrl) void Linking.openURL(cfg.supportUrl);
-              else Alert.alert('Quasi pronto', 'La raccolta dei sostenitori apre a breve: ti avviseremo nell\'app.');
-            }}
-          />
-          <Card style={{ marginTop: space.lg }}>
-            <Label bold>Hai già il codice?</Label>
-            <Label dim size={14} style={{ marginTop: 4 }}>
-              Dopo il contributo ricevi un codice come ABCD-EFGH-JKLM.
+          <Card accent={RED} style={{ marginTop: space.lg }}>
+            <Label bold color={RED}>
+              Sei {TIER_LABEL[founder.tier]}. Grazie! 🎉
             </Label>
-            <TextInput
-              value={code}
-              onChangeText={(t) => {
-                setCode(t.toUpperCase());
-                setMsg(null);
-              }}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              placeholder="XXXX-XXXX-XXXX"
-              placeholderTextColor={c.textDim}
-              style={{
-                marginTop: space.md,
-                borderWidth: 1,
-                borderColor: c.border,
-                borderRadius: 12,
-                padding: space.md,
-                color: c.text,
-                fontSize: 20,
-                letterSpacing: 2,
-                textAlign: 'center',
-              }}
-            />
-            {msg ? (
-              <Label color={c.warn} style={{ marginTop: space.sm }}>
-                {msg}
-              </Label>
-            ) : null}
-            <Button
-              title="Attiva"
-              busy={busy}
-              style={{ marginTop: space.md, backgroundColor: RED }}
-              onPress={async () => {
-                setBusy(true);
-                const r = await redeemCode(code);
-                setBusy(false);
-                if (r === 'ok') onRedeemed();
-                else
-                  setMsg(
-                    r === 'invalid'
-                      ? 'Codice non valido: controlla le lettere.'
-                      : r === 'used'
-                        ? 'Questo codice è già stato usato su un altro telefono.'
-                        : 'Connessione assente: riprova tra poco.',
-                  );
-              }}
-            />
+            {founder.tier !== 'amici' ? <Label dim style={{ marginTop: 4 }}>Codice: {founder.code}</Label> : null}
           </Card>
+          {founder.gifts.length ? (
+            <Card style={{ marginTop: space.md }}>
+              <Label bold>🎁 I tuoi codici regalo</Label>
+              <Label dim size={14} style={{ marginTop: 4 }}>
+                Regalali a chi vuoi: per loro ParkingCT è gratis per sempre. Ogni codice vale per un telefono.
+              </Label>
+              {founder.gifts.map((g) => (
+                <View key={g} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.md }}>
+                  <View>
+                    <Text selectable style={{ color: c.text, fontSize: 18, fontWeight: '800', letterSpacing: 1 }}>
+                      {g}
+                    </Text>
+                    <Label dim size={13}>
+                      {used[g] ? '✅ già usato da un amico' : 'disponibile'}
+                    </Label>
+                  </View>
+                  {!used[g] ? (
+                    <Button
+                      small
+                      title="Regala"
+                      style={{ backgroundColor: RED, paddingHorizontal: space.lg }}
+                      onPress={() =>
+                        Share.share({
+                          message: `Ti regalo ParkingCT gratis per sempre! 🎁\nTrova parcheggio senza girare a vuoto.\n\nScaricala: ${cfg?.landingUrl || APK_URL}\nPoi in "Fondatori" inserisci il codice: ${g}`,
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
+              ))}
+            </Card>
+          ) : null}
+          {founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' ? (
+            <Card style={{ marginTop: space.md }}>
+              <Label bold>Vuoi regalarla anche ai tuoi amici?</Label>
+              <Label dim size={14} style={{ marginTop: 4 }}>
+                Con Fondatore Oro ricevi {gold} codici regalo, con Platino {plat}.
+              </Label>
+              <Button small title="Passa a Oro o Platino" style={{ marginTop: space.md, backgroundColor: RED }} onPress={support} />
+            </Card>
+          ) : null}
         </>
-      )}
+      ) : null}
+
+      {!founder || founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' ? (
+        <>
+          <TierCard
+            title="Fondatore"
+            price={cfg?.priceBase ?? 3}
+            perks={['🎁 ParkingCT gratis per sempre', '⭐ Il titolo di fondatore nell\'app', '🧱 Il tuo nome nel muro dei fondatori']}
+            onPress={support}
+          />
+          <TierCard
+            title="Fondatore Oro"
+            price={cfg?.priceGold ?? 10}
+            highlight
+            perks={[
+              '🎁 ParkingCT gratis per sempre',
+              `🎟️ ${gold} codici regalo: gratis per sempre anche per i tuoi amici`,
+              '🚗 L\'adesivo ParkingCT per l\'auto',
+              '🧱 Nome nel muro dei fondatori, in evidenza',
+            ]}
+            onPress={support}
+          />
+          <TierCard
+            title="Fondatore Platino"
+            price={cfg?.pricePlat ?? 25}
+            perks={[
+              '🎁 ParkingCT gratis per sempre',
+              `🎟️ ${plat} codici regalo per famiglia e amici`,
+              '🚗 L\'adesivo ParkingCT per l\'auto',
+              '🏆 Nome in cima al muro dei fondatori',
+            ]}
+            onPress={support}
+          />
+          <Label dim size={13} style={{ marginTop: space.md, textAlign: 'center' }}>
+            Dopo il contributo ricevi il tuo codice personale. Al lancio ParkingCT te lo chiede: lo inserisci una volta e resta attiva per sempre.
+          </Label>
+          {!founder ? <Button title="Sostieni ParkingCT" style={{ marginTop: space.lg, backgroundColor: RED }} onPress={support} /> : null}
+        </>
+      ) : null}
+
+      <Card style={{ marginTop: space.lg }}>
+        <Label bold>{founder ? 'Hai un altro codice?' : 'Hai già il codice?'}</Label>
+        <Label dim size={14} style={{ marginTop: 4 }}>
+          Il codice è come ABCD-EFGH-JKLM: arriva dopo il contributo o in regalo da un amico.
+        </Label>
+        <TextInput
+          value={code}
+          onChangeText={(t) => {
+            setCode(t.toUpperCase());
+            setMsg(null);
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="XXXX-XXXX-XXXX"
+          placeholderTextColor={c.textDim}
+          style={{
+            marginTop: space.md,
+            borderWidth: 1,
+            borderColor: c.border,
+            borderRadius: 12,
+            padding: space.md,
+            color: c.text,
+            fontSize: 20,
+            letterSpacing: 2,
+            textAlign: 'center',
+          }}
+        />
+        {msg ? (
+          <Label color={c.warn} style={{ marginTop: space.sm }}>
+            {msg}
+          </Label>
+        ) : null}
+        <Button
+          title="Attiva"
+          busy={busy}
+          style={{ marginTop: space.md, backgroundColor: RED }}
+          onPress={async () => {
+            setBusy(true);
+            const r = await redeemCode(code);
+            setBusy(false);
+            if (r === 'ok') onRedeemed();
+            else
+              setMsg(
+                r === 'invalid'
+                  ? 'Codice non valido: controlla le lettere.'
+                  : r === 'used'
+                    ? 'Questo codice è già stato usato su un altro telefono.'
+                    : 'Connessione assente: riprova tra poco.',
+              );
+          }}
+        />
+      </Card>
     </ScrollView>
   );
 }
@@ -567,7 +858,7 @@ function InfoScreen({ onBack }: { onBack: () => void }) {
       <Text style={{ color: c.text, fontSize: 20, fontWeight: '800', marginTop: space.xl }}>La tua privacy</Text>
       <Label style={{ marginTop: space.sm, lineHeight: 22 }}>
         • La posizione del telefono resta sul telefono: serve a ricordare dove parcheggi.{'\n'}• Al server inviamo solo, in forma anonima, i
-        parcheggi conclusi e i posti che si liberano, senza nome né numero di telefono.{'\n'}• Per il contatore usiamo solo la tua zona (circa
+        parcheggi conclusi e i posti che si liberano, senza nome né numero di telefono.{'\n'}• Per statistiche anonime usiamo solo la tua zona (circa
         5 km).{'\n'}• Nessuno vede mai dove sei tu.
       </Label>
       <Label dim size={13} style={{ marginTop: space.xl }}>
@@ -614,7 +905,7 @@ function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'foun
   const text =
     kind === 'launch'
       ? `Da oggi ricevi gli avvisi dei posti che si liberano vicino a te.${founder ? ' Grazie per averci sostenuto fin dall\'inizio!' : ''}`
-      : 'Grazie per il tuo contributo: ParkingCT nasce anche grazie a te. Per te è attiva gratis, per sempre.';
+      : 'ParkingCT nasce anche grazie a te. Per te è attiva gratis, per sempre.';
   return (
     <Modal transparent animationType="fade" visible onRequestClose={() => onClose()}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: space.xl }}>

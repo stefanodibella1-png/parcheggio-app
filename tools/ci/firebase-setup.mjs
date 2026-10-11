@@ -49,6 +49,13 @@ const cfgDoc = await api('PATCH', `${fsBase}/config/public`, {
     supportUrl: { stringValue: cfgFile.supportUrl ?? '' },
     zoneTarget: { doubleValue: cfgFile.zoneTarget ?? 1000 },
     zoneName: { stringValue: cfgFile.zoneName ?? '' },
+    priceBase: { doubleValue: cfgFile.priceBase ?? 3 },
+    priceGold: { doubleValue: cfgFile.priceGold ?? 10 },
+    pricePlat: { doubleValue: cfgFile.pricePlat ?? 25 },
+    giftsGold: { doubleValue: cfgFile.giftsGold ?? 2 },
+    giftsPlat: { doubleValue: cfgFile.giftsPlat ?? 5 },
+    inviteFreeAt: { doubleValue: cfgFile.inviteFreeAt ?? 10 },
+    landingUrl: { stringValue: cfgFile.landingUrl ?? '' },
   },
 });
 if (!cfgDoc.ok) fail('Configurazione ParkingCT', cfgDoc);
@@ -65,6 +72,24 @@ for (const h of hashes) {
   else fail('Codici sostenitori', r);
 }
 console.log(`::notice title=Codici sostenitori::${hashes.length} totali, ${added} nuovi`);
+
+// 1c) accesso del control center: login con email e password (Firebase Authentication).
+// Non blocca il resto se fallisce: il control center resterà chiuso finché non riesce.
+{
+  const idt = `https://identitytoolkit.googleapis.com/admin/v2/projects/${pid}`;
+  let r = await api('PATCH', `${idt}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired`, {
+    signIn: { email: { enabled: true, passwordRequired: true } },
+  });
+  if (!r.ok && /CONFIGURATION_NOT_FOUND|not found/i.test(r.text)) {
+    const init = await api('POST', `https://identitytoolkit.googleapis.com/v2/projects/${pid}/identityPlatform:initializeAuth`, {});
+    console.log(`::notice title=Auth init::HTTP ${init.status} ${init.text.slice(0, 200).replace(/\n/g, ' ')}`);
+    r = await api('PATCH', `${idt}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired`, {
+      signIn: { email: { enabled: true, passwordRequired: true } },
+    });
+  }
+  if (r.ok) console.log('::notice title=Control center::accesso con email e password attivo');
+  else console.log(`::warning title=Control center (accesso)::HTTP ${r.status} ${r.text.slice(0, 600).replace(/\n/g, ' ')}`);
+}
 
 // 2) configurazione dell'app web
 const list = await api('GET', `https://firebase.googleapis.com/v1beta1/projects/${pid}/webApps`);
