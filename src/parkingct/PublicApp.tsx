@@ -616,6 +616,27 @@ function useCycle(): Animated.Value {
   return v;
 }
 
+/**
+ * Luna a spicchio (circa 1/3 illuminata), disegnata a righe sottili: bordo esterno = cerchio,
+ * bordo interno = ellisse (il terminatore). Nessuna maschera, quindi nessun cerchio scuro sul cielo colorato.
+ */
+const MOON_R = 15;
+const CRESCENT = Array.from({ length: 60 }, (_, i) => {
+  const y = i * 0.5 + 0.25 - MOON_R;
+  const half = Math.sqrt(Math.max(0, MOON_R * MOON_R - y * y));
+  return { top: i * 0.5, left: MOON_R - half, width: half * (1 - 1 / 3) };
+});
+
+function Crescent() {
+  return (
+    <View style={{ width: MOON_R * 2, height: MOON_R * 2, transform: [{ rotate: '-25deg' }] }}>
+      {CRESCENT.map((r, i) => (
+        <View key={i} style={{ position: 'absolute', top: r.top, left: r.left, width: r.width, height: 0.6, backgroundColor: '#F4F1DE' }} />
+      ))}
+    </View>
+  );
+}
+
 /** sfumatura verso il basso (strisce sovrapposte: nessuna libreria di gradienti) */
 function Fade({ color, top, height, max }: { color: string; top: number; height: number; max: number }) {
   const n = 10;
@@ -675,7 +696,7 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
       {/* luna */}
       <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 30, height: 30, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
         <View style={{ position: 'absolute', left: -8, top: -8, width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F1DE', opacity: 0.12 }} />
-        <Text style={{ fontSize: 30, lineHeight: 34, includeFontPadding: false, transform: [{ rotate: '-20deg' }] }}>🌙</Text>
+        <Crescent />
       </Animated.View>
       {/* palazzi: pieni, coprono sole e luna quando sorgono e tramontano */}
       <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 110, height: 110, flexDirection: 'row', alignItems: 'flex-end', zIndex: 5, elevation: 1 }}>
