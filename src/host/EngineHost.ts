@@ -533,7 +533,7 @@ class Host {
   private maybeKickActivity(now: number): void {
     if (Platform.OS !== 'android' || !this.state.active || !this.state.startedAt) return;
     const last = this.state.rates.lastActivityT ?? this.state.startedAt;
-    if (now - last < 90_000 || now - this.lastActKickT < 600_000) return;
+    if (now - last < 90_000 || now - this.lastActKickT < 300_000) return;
     this.lastActKickT = now;
     void kickActivity();
   }
@@ -879,6 +879,12 @@ class Host {
     if (!this.state.active) return;
     this.startForegroundSensors();
     await this.catchUpActivities();
+    // riconoscimento attività muto da più di 2 minuti: si riaccende subito (in primo piano funziona sempre)
+    const now = Date.now();
+    if (Platform.OS === 'android' && this.state.startedAt && now - (this.state.rates.lastActivityT ?? this.state.startedAt) > 120_000 && now - this.lastActKickT > 60_000) {
+      this.lastActKickT = now;
+      void kickActivity();
+    }
     this.pump(Date.now());
     if (this.engine) await this.applySideEffectsForState(this.engine.state);
     // il riavvio del GPS, se serve, lo fa maybeRestartGps nel tick (solo in primo piano)

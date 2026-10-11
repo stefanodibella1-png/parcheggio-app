@@ -28,7 +28,8 @@ export function startActivity(onSample: (s: ActivitySample) => void): void {
  */
 export async function kickActivity(): Promise<void> {
   ActivityRecognition.stop();
-  await new Promise((r) => setTimeout(r, 3000));
+  // Play Services: una nuova richiesta subito dopo la rimozione può restare spenta; si aspetta di più
+  await new Promise((r) => setTimeout(r, 8000));
   ActivityRecognition.start(3000);
   nativeStarted = true;
 }
