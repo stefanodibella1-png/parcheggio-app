@@ -61,7 +61,8 @@ for (const h of hashes) {
     fields: { usedBy: { nullValue: null }, usedAt: { nullValue: null } },
   });
   if (r.ok) added++;
-  else if (r.status !== 409 && r.status !== 400 && r.status !== 412) fail('Codici sostenitori', r);
+  else if (r.status === 409 || r.status === 412 || /ALREADY_EXISTS|FAILED_PRECONDITION/.test(r.text)) continue;
+  else fail('Codici sostenitori', r);
 }
 console.log(`::notice title=Codici sostenitori::${hashes.length} totali, ${added} nuovi`);
 
