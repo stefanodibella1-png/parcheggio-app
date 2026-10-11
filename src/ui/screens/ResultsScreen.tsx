@@ -58,8 +58,10 @@ export function ResultsScreen({ nav }: { nav: Nav }) {
             <BigStat label="Falsi positivi" value={m.all.falsePositiveRate} sub={`${m.all.falsePositives} su ${m.all.releasesCorrect + m.all.falsePositives} rilasci rivisti`} />
           </View>
           {m.all.toReview > 0 ? (
-            <Card style={{ marginTop: space.md, borderColor: c.warn }}>
-              <Label color={c.warn}>{m.all.toReview} rilasci da rivedere: senza revisione le percentuali non sono complete.</Label>
+            <Card style={{ marginTop: space.md }}>
+              <Label dim size={13}>
+                Facoltativo: {m.all.toReview} posti liberati non ancora verificati. Non devi fare nulla: li verifico io dagli export che mi mandi.
+              </Label>
             </Card>
           ) : null}
           <SectionTitle>Dettaglio</SectionTitle>
