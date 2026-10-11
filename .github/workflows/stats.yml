@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - 'tools/ci/stats.mjs'
+      - 'tools/ci/admin-smoke.mjs'
       - '.github/workflows/stats.yml'
   workflow_dispatch:
 
@@ -37,3 +38,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fb" && (cd "$RUNNER_TEMP/fb" && npm init -y >/dev/null && npm install google-auth-library@9 --no-audit --no-fund >/dev/null)
           cp tools/ci/stats.mjs "$RUNNER_TEMP/fb/stats.mjs"
           node "$RUNNER_TEMP/fb/stats.mjs"
+      - name: Prova del control center (solo prima della password)
+        if: github.event_name != 'schedule'
+        run: |
+          cp tools/ci/admin-smoke.mjs "$RUNNER_TEMP/fb/admin-smoke.mjs"
+          cd "$RUNNER_TEMP/fb" && PROJECT_ID="$PROJECT_ID" node admin-smoke.mjs
