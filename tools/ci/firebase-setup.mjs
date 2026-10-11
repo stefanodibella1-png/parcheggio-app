@@ -43,7 +43,11 @@ console.log('::notice title=Firestore regole::pubblicate');
 const fsBase = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents`;
 const cfgFile = JSON.parse(readFileSync('tools/ci/parkingct-config.json', 'utf8'));
 const launchMs = Date.parse(cfgFile.launchAt);
-const cfgDoc = await api('PATCH', `${fsBase}/config/public`, {
+// solo questi campi: i link di pagamento (scritti da stripe-sync.mjs) restano
+const cfgMask = ['launchAt', 'supportUrl', 'zoneTarget', 'zoneName', 'priceBase', 'priceGold', 'pricePlat', 'giftsGold', 'giftsPlat', 'inviteFreeAt', 'landingUrl']
+  .map((k) => `updateMask.fieldPaths=${k}`)
+  .join('&');
+const cfgDoc = await api('PATCH', `${fsBase}/config/public?${cfgMask}`, {
   fields: {
     launchAt: { doubleValue: launchMs },
     supportUrl: { stringValue: cfgFile.supportUrl ?? '' },

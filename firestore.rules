@@ -184,6 +184,16 @@ service cloud.firestore {
         ));
     }
 
+    // ParkingCT: pagamenti Stripe. purchases = registro privato (solo server);
+    // pickup/{ref} = il codice per il telefono che ha pagato (ref casuale di 32 caratteri, noto solo a lui)
+    match /purchases/{id} {
+      allow read, write: if false;
+    }
+    match /pickup/{ref} {
+      allow get: if ref.size() == 32;
+      allow list, write: if false;
+    }
+
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)
     match /parkings/{id} {
       allow read: if false;

@@ -33,6 +33,11 @@ import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
   euro,
+  collectPurchase,
+  formatCodeInput,
+  pendingPurchase,
+  startPurchase,
+  type Pending,
   TIER_LABEL,
   claimInvite,
   fetchAds,
@@ -931,7 +936,7 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
             <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800' }}>Cerchi parcheggio?</Text>
             {[
               { icon: '⏱️', text: 'ParkingCT trova un posto libero per te e ti informa pochi istanti prima che si liberi.' },
-              { icon: '🔔', text: 'Perché chi sta andando via avvisa sempre in automatico.' },
+              { icon: '🔔', text: 'Perché chi sta andando via avvisa sempre in automatico, prima di andare via.' },
             ].map((r) => (
               <View key={r.icon} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
                 <Text style={{ width: 28, fontSize: 16, lineHeight: 22 }}>{r.icon}</Text>
@@ -1160,6 +1165,7 @@ function TierCard({
             {p}
           </Label>
         ))}
+        <Button title={`Scegli ${title} · ${euro(price)}`} small style={{ marginTop: space.md, backgroundColor: highlight ? RED : '#37474F' }} onPress={onPress} />
       </Card>
     </Pressable>
   );
@@ -1184,10 +1190,45 @@ function FounderScreen({
   useEffect(() => {
     if (founder?.gifts.length) void giftStatus(founder.gifts).then(setUsed);
   }, [founder]);
-  const support = () => {
-    if (cfg?.supportUrl) void Linking.openURL(cfg.supportUrl);
-    else Alert.alert('Quasi pronto', "La raccolta dei sostenitori apre a breve: ti avviseremo nell'app.");
+  const [pending, setPending] = useState<Pending | null>(null);
+  const buy = async (tier: Tier) => {
+    const url = await startPurchase(cfg, tier);
+    if (!url) {
+      if (cfg?.supportUrl) void Linking.openURL(cfg.supportUrl);
+      else Alert.alert('Quasi pronto', "I pagamenti aprono a breve: ti avviseremo nell'app.");
+      return;
+    }
+    setPending(await pendingPurchase());
+    void Linking.openURL(url);
   };
+  // pagamento fatto? il codice arriva qui da solo (controllo ogni 10 s mentre la pagina è aperta)
+  const redeemedRef = useRef(onRedeemed);
+  redeemedRef.current = onRedeemed;
+  useEffect(() => {
+    let stop = false;
+    const check = async () => {
+      const p = await pendingPurchase();
+      if (stop) return;
+      setPending(p);
+      if (!p) return;
+      const got = await collectPurchase();
+      if (stop || !got) return;
+      if (got.result === 'ok' || got.result === 'moved') {
+        setPending(null);
+        Alert.alert('Pagamento ricevuto! 🎉', `Il tuo codice personale è ${got.code}. È già attivo su questo telefono: conservalo, ti serve se cambi telefono.`);
+        redeemedRef.current();
+      }
+    };
+    void check();
+    const id = setInterval(() => void check(), 10_000);
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && void check());
+    return () => {
+      stop = true;
+      clearInterval(id);
+      sub.remove();
+    };
+  }, []);
+  const support = () => void buy('oro');
   const gold = cfg?.giftsGold ?? 3;
   const plat = cfg?.giftsPlat ?? 7;
   return (
@@ -1200,6 +1241,15 @@ function FounderScreen({
       <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm }}>
         ParkingCT nasce a Catania, da un catanese. Con un piccolo contributo l'aiuti a partire e la usi gratis per sempre.
       </Label>
+      {pending ? (
+        <Card accent={RED} style={{ marginTop: space.lg }}>
+          <Label bold>⏳ Pagamento in verifica</Label>
+          <Label dim size={14} style={{ marginTop: 4 }}>
+            Appena il pagamento è confermato il tuo codice compare qui e si attiva da solo (di solito entro pochi minuti). Puoi chiudere l'app:
+            lo ritroverai quando la riapri.
+          </Label>
+        </Card>
+      ) : null}
 
       {founder ? (
         <>
@@ -1283,7 +1333,7 @@ function FounderScreen({
             title="Fondatore"
             price={cfg?.priceBase ?? 2.9}
             perks={['🎁 ParkingCT gratis per sempre', '⭐ Il titolo di fondatore nell\'app', '🧱 Il tuo nome nel muro dei fondatori']}
-            onPress={support}
+            onPress={() => void buy('base')}
           />
           <TierCard
             title="Fondatore Oro"
@@ -1295,7 +1345,7 @@ function FounderScreen({
               '🚗 L\'adesivo ParkingCT per l\'auto',
               '🧱 Nome nel muro dei fondatori, in evidenza',
             ]}
-            onPress={support}
+            onPress={() => void buy('oro')}
           />
           <TierCard
             title="Fondatore Platino"
@@ -1306,12 +1356,12 @@ function FounderScreen({
               '🚗 L\'adesivo ParkingCT per l\'auto',
               '🏆 Nome in cima al muro dei fondatori',
             ]}
-            onPress={support}
+            onPress={() => void buy('platino')}
           />
           <Label dim size={13} style={{ marginTop: space.md, textAlign: 'center' }}>
-            Dopo il contributo ricevi il tuo codice personale. Al lancio ParkingCT te lo chiede: lo inserisci una volta e resta attiva per sempre.
+            Paghi in modo sicuro con Stripe (carta, Apple Pay, Google Pay). Il codice personale arriva qui nell'app entro pochi minuti e si attiva da
+            solo: conservalo.
           </Label>
-          {!founder ? <Button title="Sostieni ParkingCT" style={{ marginTop: space.lg, backgroundColor: RED }} onPress={support} /> : null}
         </>
       ) : null}
 
@@ -1324,12 +1374,13 @@ function FounderScreen({
         <TextInput
           value={code}
           onChangeText={(t) => {
-            setCode(t.toUpperCase());
+            setCode(formatCodeInput(t));
             setMsg(null);
           }}
           autoCapitalize="characters"
           autoCorrect={false}
           placeholder="XXXX-XXXX-XXXX"
+          maxLength={14}
           placeholderTextColor={c.textDim}
           style={{
             marginTop: space.md,

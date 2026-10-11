@@ -23,6 +23,10 @@ export interface PublicConfig {
   /** amici invitati per avere ParkingCT gratis per sempre (0 = disattivato) */
   inviteFreeAt: number;
   landingUrl: string;
+  /** link di pagamento Stripe per livello ('' = pagamenti non ancora attivi) */
+  linkBase: string;
+  linkGold: string;
+  linkPlat: string;
 }
 
 export const APK_URL = 'https://github.com/stefanodibella1-png/parcheggio-app/releases/latest/download/ParkingCT.apk';
@@ -39,6 +43,9 @@ const DEFAULT_CONFIG: PublicConfig = {
   giftsPlat: 7,
   inviteFreeAt: 10,
   landingUrl: '',
+  linkBase: '',
+  linkGold: '',
+  linkPlat: '',
 };
 
 export function base(): string | null {
@@ -92,6 +99,9 @@ export async function getConfig(): Promise<PublicConfig> {
         giftsPlat: num(f.giftsPlat) ?? DEFAULT_CONFIG.giftsPlat,
         inviteFreeAt: num(f.inviteFreeAt) ?? DEFAULT_CONFIG.inviteFreeAt,
         landingUrl: str(f.landingUrl) ?? '',
+        linkBase: str(f.linkBase) ?? '',
+        linkGold: str(f.linkGold) ?? '',
+        linkPlat: str(f.linkPlat) ?? '',
       };
       await kvSet('pc:config', JSON.stringify(cfg)).catch(() => {});
       return cfg;
@@ -563,4 +573,61 @@ export async function saveWallEntry(f: FounderInfo, name: string, visible: boole
 /** prezzo in formato italiano: 2,90 € */
 export function euro(n: number): string {
   return `${n.toLocaleString('it-IT', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })} €`;
+}
+
+// ---------------------------------------------------------------------------------------
+// pagamento con Stripe: il telefono crea un riferimento casuale, lo passa al pagamento
+// e poi ritira il codice da pickup/{ref} (lo scrive il server appena il pagamento è confermato)
+
+export interface Pending {
+  ref: string;
+  tier: Tier;
+  t: number;
+}
+
+export function payLink(cfg: PublicConfig | null, tier: Tier): string {
+  if (!cfg) return '';
+  return tier === 'oro' ? cfg.linkGold : tier === 'platino' ? cfg.linkPlat : cfg.linkBase;
+}
+
+/** Prepara il pagamento: restituisce l'indirizzo da aprire ('' se i pagamenti non sono attivi). */
+export async function startPurchase(cfg: PublicConfig | null, tier: Tier): Promise<string> {
+  const link = payLink(cfg, tier);
+  if (!link) return '';
+  const ref = sha256Hex(`${Math.random()}-${Date.now()}-${await deviceId()}`).slice(0, 32);
+  await kvSet('pc:pending', JSON.stringify({ ref, tier, t: Date.now() } satisfies Pending)).catch(() => {});
+  return `${link}${link.includes('?') ? '&' : '?'}client_reference_id=${ref}`;
+}
+
+export async function pendingPurchase(): Promise<Pending | null> {
+  const s = await kvGet('pc:pending').catch(() => null);
+  if (!s) return null;
+  const p = JSON.parse(s) as Pending;
+  // dopo 3 giorni si smette di aspettare
+  if (Date.now() - p.t > 3 * 86_400_000) return null;
+  return p;
+}
+
+export async function clearPending(): Promise<void> {
+  await kvSet('pc:pending', '').catch(() => {});
+}
+
+/** Il codice del pagamento è pronto? Se sì lo attiva su questo telefono. */
+export async function collectPurchase(): Promise<{ code: string; result: RedeemResult } | null> {
+  const p = await pendingPurchase();
+  const b = base();
+  if (!p || !b) return null;
+  const r = await call(`${b}/pickup/${p.ref}?${key()}`);
+  if (!r?.ok) return null;
+  const code = str(((await r.json()) as { fields: Record<string, FsVal> }).fields.code);
+  if (!code) return null;
+  const result = await redeemCode(code);
+  if (result === 'ok' || result === 'moved') await clearPending();
+  return { code: prettyCode(code), result };
+}
+
+/** formatta il codice mentre si scrive: ABCD-EFGH-JKLM */
+export function formatCodeInput(t: string): string {
+  const c = t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  return [c.slice(0, 4), c.slice(4, 8), c.slice(8, 12)].filter(Boolean).join('-');
 }

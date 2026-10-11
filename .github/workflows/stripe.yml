@@ -1,0 +1,50 @@
+name: Pagamenti Stripe (codici sostenitori)
+
+# Ogni 5 minuti: controlla i pagamenti per ~4,5 minuti (ogni 20 s) e consegna i codici.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ci/stripe-sync.mjs'
+      - 'tools/ci/parkingct-config.json'
+      - '.github/workflows/stripe.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: stripe
+  cancel-in-progress: false
+
+jobs:
+  stripe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+    steps:
+      - name: Chiave Stripe presente?
+        id: gate
+        run: |
+          if [ -z "$STRIPE_SECRET_KEY" ]; then
+            echo "::notice title=Stripe::in attesa del secret STRIPE_SECRET_KEY (chiave segreta di test sk_test_...)"
+            echo "go=no" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "go=yes" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.go == 'yes'
+      - uses: actions/setup-node@v5
+        if: steps.gate.outputs.go == 'yes'
+        with:
+          node-version: 22
+      - name: Pagamenti → codici
+        if: steps.gate.outputs.go == 'yes'
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          export PROJECT_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project_id)" "$RUNNER_TEMP/sa.json")
+          export CFG_JSON="$PWD/tools/ci/parkingct-config.json"
+          mkdir -p "$RUNNER_TEMP/fb" && (cd "$RUNNER_TEMP/fb" && npm init -y >/dev/null && npm install google-auth-library@9 --no-audit --no-fund >/dev/null)
+          cp tools/ci/stripe-sync.mjs "$RUNNER_TEMP/fb/stripe-sync.mjs"
+          cd "$RUNNER_TEMP/fb" && node stripe-sync.mjs
