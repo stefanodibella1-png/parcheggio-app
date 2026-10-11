@@ -916,8 +916,8 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
           <Piece delay={2300}>
             <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800' }}>Cerchi parcheggio?</Text>
             {[
-              { icon: '⏱️', text: 'Trova un posto libero, minuti prima che si liberi.' },
-              { icon: '🔔', text: 'Chi sta andando via ti avvisa in automatico.' },
+              { icon: '⏱️', text: 'ParkingCT trova un posto libero per te e ti informa pochi istanti prima che si liberi.' },
+              { icon: '🔔', text: 'Perché chi sta andando via avvisa sempre in automatico.' },
             ].map((r) => (
               <View key={r.icon} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
                 <Text style={{ width: 28, fontSize: 16, lineHeight: 22 }}>{r.icon}</Text>
