@@ -127,7 +127,9 @@ export async function notifyEvent(
   if (!txt) return;
   // ParkingCT: all'utente solo ciò che gli serve, senza termini tecnici
   if (IS_PUBLIC) {
-    if (e.type !== 'PARKED') return;
+    // solo quando si scende davvero e ci si allontana a piedi: una sosta seduti in auto
+    // (coda, attesa, doppia fila) non è un parcheggio da ricordare
+    if (!(e.type === 'PARKED_USER_AWAY' && e.from === 'PARKED')) return;
     txt = { title: '🅿️ Ho ricordato dove hai parcheggiato', body: session?.spot.address?.formatted ?? 'Apri ParkingCT per vedere dove.', important: true };
   }
   const isReturn = RETURN_TYPES.has(e.type);

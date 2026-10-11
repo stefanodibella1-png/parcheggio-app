@@ -83,6 +83,8 @@ interface Memory {
   headings: { t: number; h: number }[]; // in movimento, ultimi 30 s
   lastValidActivity: ActivitySample | null;
   lastActivityAny: ActivitySample | null;
+  /** ultimo campione activity a piedi (WALKING/ON_FOOT/RUNNING) */
+  lastWalkActT: number | null;
   steps: { t: number; steps: number }[]; // ultimi 20 s
   hasMotion: boolean;
 
@@ -182,6 +184,7 @@ export class DetectionEngine {
       headings: [],
       lastValidActivity: null,
       lastActivityAny: null,
+      lastWalkActT: null,
       steps: [],
       hasMotion: false,
       vehicleOkSince: null,
@@ -510,6 +513,9 @@ export class DetectionEngine {
 
   private onActivity(a: ActivitySample): void {
     this.m.lastActivityAny = a;
+    if ((a.activity === 'WALKING' || a.activity === 'RUNNING') && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
+      this.m.lastWalkActT = Math.max(this.m.lastWalkActT ?? 0, a.t);
+    }
     if (a.activity !== 'UNKNOWN' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       // non sostituire con un campione più vecchio arrivato in ritardo
       if (!this.m.lastValidActivity || a.t >= this.m.lastValidActivity.t) {
@@ -1432,7 +1438,22 @@ export class DetectionEngine {
   private returnScore(now: number): number {
     // punto dell'auto troppo incerto (garage senza GPS): nessuna previsione
     if (this.m.session?.gpsLostAtPark) return 0;
+    if (!this.walkingEvidence(now)) return 0;
     return Math.max(this.returnScoreShort(now), this.returnScoreLong(now));
+  }
+
+  /**
+   * Il ritorno all'auto si fa a piedi: se l'activity dice che si è fermi (STILL), o se
+   * il telefono fornisce l'activity ma non segnala camminata da un po', le piccole
+   * oscillazioni del GPS (al chiuso, seduti) non sono un avvicinamento.
+   */
+  private walkingEvidence(now: number): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    const a = m.lastActivityAny;
+    if (!a || (now - a.t) / 1000 > 300) return true; // activity non disponibile: decide solo il GPS
+    if (a.activity === 'STILL' && a.confidence >= cfg.RETURN_STILL_BLOCK_CONF && (now - a.t) / 1000 <= 60) return false;
+    return m.lastWalkActT !== null && (now - m.lastWalkActT) / 1000 <= cfg.RETURN_WALK_EVIDENCE_S;
   }
 
   /** avvicinamento continuo nell'ultimo minuto (GPS frequente) */

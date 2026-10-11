@@ -110,6 +110,10 @@ export interface DetectionConfig {
   RETURN_DEPART_DELAY_S: number;
   /** velocità massima a piedi plausibile: fix più "veloci" verso o via dall'auto sono salti GPS (m/s) */
   RETURN_MAX_WALK_SPEED_MS: number;
+  /** activity STILL con almeno questa confidenza: nessuna previsione di ritorno (seduto, GPS che oscilla) */
+  RETURN_STILL_BLOCK_CONF: number;
+  /** se il telefono fornisce l'activity, serve una camminata negli ultimi N secondi per prevedere il ritorno */
+  RETURN_WALK_EVIDENCE_S: number;
 
   // --- ricerca del parcheggio (sperimentale) ---
   /** finestra di guida analizzata (s) */
@@ -234,6 +238,8 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_WALK_SPEED_MS: 1.2,
   RETURN_DEPART_DELAY_S: 60,
   RETURN_MAX_WALK_SPEED_MS: 4,
+  RETURN_STILL_BLOCK_CONF: 60,
+  RETURN_WALK_EVIDENCE_S: 120,
 
   SEARCH_WINDOW_S: 180,
   SEARCH_MIN_SPEED: 5,
