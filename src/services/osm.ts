@@ -1,4 +1,5 @@
 // Semafori e distributori di carburante da OpenStreetMap (Overpass API), scaricati per zone di circa 2 km
+// Passaggi a livello (railway=level_crossing) trattati come semafori: attesa con le sbarre giù ≠ parcheggio.
 // e tenuti sul telefono per 30 giorni. Servono al motore per distinguere la coda
 // al semaforo da un parcheggio. Dati © OpenStreetMap contributors (ODbL).
 import { kvGet, kvSet } from '../storage/db.ts';
@@ -30,7 +31,7 @@ async function download(key: string): Promise<MapData | null> {
   const e = (b + 1) * TILE + MARGIN;
   const bbox = `${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)}`;
   const q =
-    `[out:json][timeout:25];(node["highway"="traffic_signals"](${bbox});node["crossing"="traffic_signals"](${bbox});` +
+    `[out:json][timeout:25];(node["highway"="traffic_signals"](${bbox});node["crossing"="traffic_signals"](${bbox});node["railway"="level_crossing"](${bbox});` +
     `nwr["amenity"="fuel"](${bbox}););out tags center;`;
   for (const url of ENDPOINTS) {
     const ctrl = new AbortController();
@@ -70,7 +71,7 @@ async function download(key: string): Promise<MapData | null> {
 /** Semafori e distributori della zona (dalla memoria del telefono o scaricati). null = non disponibili ora. */
 export async function signalsForTile(key: string, now: number): Promise<MapData | null> {
   try {
-    const cached = await kvGet(`osm:map:${key}`);
+    const cached = await kvGet(`osm:map2:${key}`);
     if (cached) {
       const c = JSON.parse(cached) as { t: number; data: MapData };
       if (now - c.t < TTL_MS) return c.data;
@@ -79,6 +80,6 @@ export async function signalsForTile(key: string, now: number): Promise<MapData 
     // cache illeggibile: si riscarica
   }
   const fresh = await download(key);
-  if (fresh) await kvSet(`osm:map:${key}`, JSON.stringify({ t: now, data: fresh })).catch(() => {});
+  if (fresh) await kvSet(`osm:map2:${key}`, JSON.stringify({ t: now, data: fresh })).catch(() => {});
   return fresh;
 }
