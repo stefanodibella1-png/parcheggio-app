@@ -42,4 +42,4 @@ jobs:
         if: github.event_name != 'schedule'
         run: |
           cp tools/ci/admin-smoke.mjs "$RUNNER_TEMP/fb/admin-smoke.mjs"
-          cd "$RUNNER_TEMP/fb" && PROJECT_ID="$PROJECT_ID" node admin-smoke.mjs
+          CFG_FILE="$PWD/src/community/firebaseConfig.ts" && cd "$RUNNER_TEMP/fb" && CFG_FILE="$CFG_FILE" node admin-smoke.mjs

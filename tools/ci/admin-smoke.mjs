@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { GoogleAuth } from 'google-auth-library';
 
 const pid = process.env.PROJECT_ID;
-const cfgSrc = readFileSync('src/community/firebaseConfig.ts', 'utf8');
+const cfgSrc = readFileSync(process.env.CFG_FILE, "utf8");
 const apiKey = /apiKey":\s*"([^"]+)"/.exec(cfgSrc)[1];
 const base = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents`;
 const name = (p) => `projects/${pid}/databases/(default)/documents/${p}`;
