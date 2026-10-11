@@ -854,8 +854,7 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
         </Piece>
         <Piece delay={2300}>
           <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: space.md, lineHeight: 21, textAlign: 'center' }}>
-            Cerchi parcheggio? ParkingCT ti avvisa dove, vicino a te, un posto si libererà tra pochi minuti. Lo sa in anticipo perché chi torna alla propria
-            auto lo segnala in automatico, senza toccare il telefono.
+            Ti dice dove si libera un posto vicino a te, prima ancora che l'altra auto parta.
           </Text>
         </Piece>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
