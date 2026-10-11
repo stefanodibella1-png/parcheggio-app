@@ -534,42 +534,8 @@ const TILE_H = 46;
 const TILE_TOP = '#262E3F';
 const TILE_BOTTOM = '#1C2230';
 
-function Half({ digit, top }: { digit: string; top: boolean }) {
-  return (
-    <View
-      style={{
-        height: TILE_H / 2,
-        width: TILE_W,
-        overflow: 'hidden',
-        backgroundColor: top ? TILE_TOP : TILE_BOTTOM,
-        borderTopLeftRadius: top ? 7 : 0,
-        borderTopRightRadius: top ? 7 : 0,
-        borderBottomLeftRadius: top ? 0 : 7,
-        borderBottomRightRadius: top ? 0 : 7,
-      }}
-    >
-      <Text
-        style={{
-          position: 'absolute',
-          top: top ? 0 : -TILE_H / 2,
-          width: TILE_W,
-          height: TILE_H,
-          lineHeight: TILE_H,
-          textAlign: 'center',
-          color: '#FFFFFF',
-          fontSize: 32,
-          fontWeight: '800',
-          fontVariant: ['tabular-nums'],
-          includeFontPadding: false,
-        }}
-      >
-        {digit}
-      </Text>
-    </View>
-  );
-}
-
 function FlipDigit({ value }: { value: string }) {
+  // cifra che "rotola": la vecchia esce verso l'alto, la nuova entra dal basso (affidabile su ogni telefono)
   const [cur, setCur] = useState(value);
   const [prev, setPrev] = useState(value);
   const anim = useRef(new Animated.Value(1)).current;
@@ -578,46 +544,39 @@ function FlipDigit({ value }: { value: string }) {
     setPrev(cur);
     setCur(value);
     anim.setValue(0);
-    Animated.timing(anim, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
+    Animated.timing(anim, { toValue: 1, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
-  const topRot = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '-90deg', '-90deg'] });
-  const botRot = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['90deg', '90deg', '0deg'] });
-  const shade = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.45, 0] });
+  const txt = {
+    width: TILE_W,
+    height: TILE_H,
+    lineHeight: TILE_H,
+    textAlign: 'center' as const,
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '800' as const,
+    fontVariant: ['tabular-nums' as const],
+    includeFontPadding: false,
+  };
   return (
     <View
       style={{
         width: TILE_W,
         height: TILE_H,
         borderRadius: 7,
-        shadowColor: '#000',
-        shadowOpacity: 0.5,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 5 },
-        elevation: 8,
+        overflow: 'hidden',
         backgroundColor: TILE_BOTTOM,
+        elevation: 6,
       }}
     >
-      {/* dietro: metà alta nuova, metà bassa vecchia */}
-      <Half digit={cur} top />
-      <Half digit={prev} top={false} />
-      {/* palette che cade */}
-      <Animated.View
-        style={{ position: 'absolute', top: 0, transformOrigin: 'bottom', transform: [{ perspective: 300 }, { rotateX: topRot }], backfaceVisibility: 'hidden' }}
-      >
-        <Half digit={prev} top />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: TILE_H / 2, backgroundColor: TILE_TOP }} />
+      <Animated.View style={{ transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, -TILE_H] }) }] }}>
+        <Text style={txt}>{prev}</Text>
+        <Text style={txt}>{cur}</Text>
       </Animated.View>
-      <Animated.View
-        style={{ position: 'absolute', top: TILE_H / 2, transformOrigin: 'top', transform: [{ perspective: 300 }, { rotateX: botRot }], backfaceVisibility: 'hidden' }}
-      >
-        <Half digit={cur} top={false} />
-      </Animated.View>
-      {/* ombra mentre gira */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: TILE_H / 2, height: TILE_H / 2, backgroundColor: '#000', opacity: shade, borderBottomLeftRadius: 7, borderBottomRightRadius: 7 }} />
-      {/* cerniera */}
-      <View style={{ position: 'absolute', left: 0, right: 0, top: TILE_H / 2 - 0.5, height: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
-      <View style={{ position: 'absolute', left: -2, top: TILE_H / 2 - 3, width: 3, height: 6, borderRadius: 1, backgroundColor: '#0B0E15' }} />
-      <View style={{ position: 'absolute', right: -2, top: TILE_H / 2 - 3, width: 3, height: 6, borderRadius: 1, backgroundColor: '#0B0E15' }} />
+      {/* riflesso e cerniera */}
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: TILE_H / 2, backgroundColor: 'rgba(255,255,255,0.04)' }} />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: TILE_H / 2 - 0.5, height: 1, backgroundColor: 'rgba(0,0,0,0.55)' }} />
     </View>
   );
 }
@@ -657,6 +616,18 @@ function useCycle(): Animated.Value {
   return v;
 }
 
+/** sfumatura verso il basso (strisce sovrapposte: nessuna libreria di gradienti) */
+function Fade({ color, top, height, max }: { color: string; top: number; height: number; max: number }) {
+  const n = 10;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top, height }}>
+      {Array.from({ length: n }, (_, i) => (
+        <View key={i} style={{ height: height / n, backgroundColor: color, opacity: (max * (i + 1)) / n }} />
+      ))}
+    </View>
+  );
+}
+
 /** 0–0.42 giorno · 0.42–0.52 tramonto · 0.52–0.9 notte · 0.9–1 alba */
 function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
   const day = cycle.interpolate({ inputRange: [0, 0.42, 0.52, 0.9, 1], outputRange: [1, 1, 0, 0, 1] });
@@ -680,14 +651,16 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
     <View style={{ height: SCENE_H, overflow: 'hidden' }}>
       {/* notte (base) */}
       <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#16224A' }} />
-      <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 90, height: 90, backgroundColor: '#2C3F75', opacity: 0.7 }} />
+      <Fade color="#2C3F75" top={HORIZON - 110} height={110} max={0.8} />
       {/* giorno */}
       <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: day }}>
         <View style={{ flex: 1, backgroundColor: '#3A8BDB' }} />
-        <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 90, height: 90, backgroundColor: '#8CC4F2', opacity: 0.6 }} />
+        <Fade color="#A9D4F5" top={HORIZON - 110} height={110} max={0.75} />
       </Animated.View>
       {/* tramonto / alba */}
-      <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 120, height: 120, backgroundColor: '#F4874B', opacity: dusk }} />
+      <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: dusk }}>
+        <Fade color="#F4874B" top={HORIZON - 150} height={150} max={1} />
+      </Animated.View>
       {/* stelle */}
       <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: HORIZON, opacity: night }}>
         {STARS.map((s, i) => (
@@ -703,10 +676,11 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
       <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 30, height: 30, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
         <View style={{ position: 'absolute', left: -8, top: -8, width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F1DE', opacity: 0.12 }} />
         <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F4F1DE' }} />
-        <View style={{ position: 'absolute', left: 10, top: -4, width: 28, height: 28, borderRadius: 14, backgroundColor: '#16224A' }} />
+        <View style={{ position: 'absolute', left: 7, top: 8, width: 6, height: 6, borderRadius: 3, backgroundColor: '#DCD6BC' }} />
+        <View style={{ position: 'absolute', left: 17, top: 16, width: 5, height: 5, borderRadius: 3, backgroundColor: '#DCD6BC' }} />
       </Animated.View>
       {/* palazzi: pieni, coprono sole e luna quando sorgono e tramontano */}
-      <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 110, height: 110, flexDirection: 'row', alignItems: 'flex-end' }}>
+      <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 110, height: 110, flexDirection: 'row', alignItems: 'flex-end', zIndex: 5, elevation: 1 }}>
         {BUILDINGS.map((h, i) => (
           <View
             key={i}
@@ -745,7 +719,7 @@ function ParkingSign() {
     return () => loop.stop();
   }, [pulse]);
   return (
-    <View style={{ position: 'absolute', right: 14, bottom: 10, alignItems: 'center' }}>
+    <View style={{ position: 'absolute', right: 14, bottom: 10, alignItems: 'center', zIndex: 10, elevation: 9 }}>
       <Animated.View
         style={{
           position: 'absolute',
@@ -809,6 +783,7 @@ function Road() {
           position: 'absolute',
           left: '30%',
           bottom: 12,
+          zIndex: 10,
           fontSize: 34,
           transform: [{ scaleX: -1 }, { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] }) }],
         }}
