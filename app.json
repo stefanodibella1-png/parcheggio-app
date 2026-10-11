@@ -8,9 +8,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "backgroundColor": "#0E1116",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "runtimeVersion": "2",
     "updates": {
       "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0,

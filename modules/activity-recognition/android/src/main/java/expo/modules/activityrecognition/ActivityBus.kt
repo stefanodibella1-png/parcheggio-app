@@ -27,6 +27,11 @@ object ActivityBus {
   }
 
   @Synchronized
+  fun clearIf(l: (Map<String, Any>) -> Unit) {
+    if (listener === l) listener = null
+  }
+
+  @Synchronized
   fun drain(): List<Map<String, Any>> {
     val out = buffer.toList()
     buffer.clear()

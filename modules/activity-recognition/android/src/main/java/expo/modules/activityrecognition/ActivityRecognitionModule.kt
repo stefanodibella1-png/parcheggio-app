@@ -21,17 +21,21 @@ class ActivityRecognitionModule : Module() {
 
   private var running = false
 
+  private val forward: (Map<String, Any>) -> Unit = { event -> sendEvent("onActivity", event) }
+
   override fun definition() = ModuleDefinition {
     Name("ActivityRecognition")
 
     Events("onActivity")
 
     OnCreate {
-      ActivityBus.listener = { event -> sendEvent("onActivity", event) }
+      ActivityBus.listener = forward
     }
 
     OnDestroy {
-      ActivityBus.listener = null
+      // Dopo un ricaricamento di JS il nuovo modulo può essere creato PRIMA che il vecchio
+      // venga distrutto: si stacca solo il proprio listener, non quello del nuovo modulo.
+      ActivityBus.clearIf(forward)
     }
 
     AsyncFunction("isAvailable") {

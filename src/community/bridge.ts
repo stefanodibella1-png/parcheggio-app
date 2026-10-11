@@ -5,6 +5,7 @@
 import type { DetectionConfig } from '../../engine/config.ts';
 import type { DetectionEvent, EngineSnapshot, LocationSample, ParkingSession, ReturnInfo } from '../../engine/types.ts';
 import { notifyNearbySpot } from '../services/notifications.ts';
+import { speak } from '../services/voice.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
 import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
 import { distanceM } from '../../engine/geo.ts';
@@ -157,6 +158,7 @@ export class CommunityBridge {
     if (!listening || !last || this.polling || now - this.lastPollT < cfg.COMMUNITY_POLL_S * 1000) return;
     this.lastPollT = now;
     this.polling = true;
+    const driving = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING'].includes(snap.state);
     void fetchNearby(last, cfg.COMMUNITY_RADIUS_M, this.deviceId, now)
       .then(async (list) => {
         if (list === null) {
@@ -173,6 +175,15 @@ export class CommunityBridge {
           if (this.notified.get(s.id) === s.kind) continue;
           this.notified.set(s.id, s.kind);
           await notifyNearbySpot(s, now);
+          if (driving) {
+            const where = s.address ? `in ${s.address}` : 'vicino a te';
+            const mins = Math.max(1, Math.round((s.freeAt - now) / 60000));
+            speak(
+              s.kind === 'FREED'
+                ? `Posto appena liberato ${where}, a ${s.distanceM} metri.`
+                : `Posto che si libera ${where} tra circa ${mins} minut${mins === 1 ? 'o' : 'i'}, a ${s.distanceM} metri.`,
+            );
+          }
         }
       })
       .finally(() => {
