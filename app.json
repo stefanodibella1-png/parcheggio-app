@@ -42,7 +42,11 @@
         "POST_NOTIFICATIONS",
         "WAKE_LOCK"
       ],
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2563EB"
+      }
     },
     "plugins": [
       [
@@ -61,7 +65,13 @@
           "motionPermission": "PARCHEGGIO usa i dati di movimento per distinguere se sei in auto o a piedi."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563EB"
+        }
+      ],
       "expo-sqlite",
       "expo-updates",
       [
@@ -78,6 +88,7 @@
         "projectId": "08c3d0c7-bd32-4382-9152-2692c6ed6864"
       }
     },
-    "owner": "stefanodibella1"
+    "owner": "stefanodibella1",
+    "icon": "./assets/icon.png"
   }
 }
