@@ -527,6 +527,196 @@ function CarHere({ session, distanceM, now }: { session: ParkingSession; distanc
   );
 }
 
+// --- conto alla rovescia "a palette" in 3D (solo Animated, nessuna libreria nativa) ---
+
+const TILE_W = 30;
+const TILE_H = 46;
+const TILE_TOP = '#262E3F';
+const TILE_BOTTOM = '#1C2230';
+
+function Half({ digit, top }: { digit: string; top: boolean }) {
+  return (
+    <View
+      style={{
+        height: TILE_H / 2,
+        width: TILE_W,
+        overflow: 'hidden',
+        backgroundColor: top ? TILE_TOP : TILE_BOTTOM,
+        borderTopLeftRadius: top ? 7 : 0,
+        borderTopRightRadius: top ? 7 : 0,
+        borderBottomLeftRadius: top ? 0 : 7,
+        borderBottomRightRadius: top ? 0 : 7,
+      }}
+    >
+      <Text
+        style={{
+          position: 'absolute',
+          top: top ? 0 : -TILE_H / 2,
+          width: TILE_W,
+          height: TILE_H,
+          lineHeight: TILE_H,
+          textAlign: 'center',
+          color: '#FFFFFF',
+          fontSize: 32,
+          fontWeight: '800',
+          fontVariant: ['tabular-nums'],
+          includeFontPadding: false,
+        }}
+      >
+        {digit}
+      </Text>
+    </View>
+  );
+}
+
+function FlipDigit({ value }: { value: string }) {
+  const [cur, setCur] = useState(value);
+  const [prev, setPrev] = useState(value);
+  const anim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (value === cur) return;
+    setPrev(cur);
+    setCur(value);
+    anim.setValue(0);
+    Animated.timing(anim, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  const topRot = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '-90deg', '-90deg'] });
+  const botRot = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['90deg', '90deg', '0deg'] });
+  const shade = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.45, 0] });
+  return (
+    <View
+      style={{
+        width: TILE_W,
+        height: TILE_H,
+        borderRadius: 7,
+        shadowColor: '#000',
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 5 },
+        elevation: 8,
+        backgroundColor: TILE_BOTTOM,
+      }}
+    >
+      {/* dietro: metà alta nuova, metà bassa vecchia */}
+      <Half digit={cur} top />
+      <Half digit={prev} top={false} />
+      {/* palette che cade */}
+      <Animated.View
+        style={{ position: 'absolute', top: 0, transformOrigin: 'bottom', transform: [{ perspective: 300 }, { rotateX: topRot }], backfaceVisibility: 'hidden' }}
+      >
+        <Half digit={prev} top />
+      </Animated.View>
+      <Animated.View
+        style={{ position: 'absolute', top: TILE_H / 2, transformOrigin: 'top', transform: [{ perspective: 300 }, { rotateX: botRot }], backfaceVisibility: 'hidden' }}
+      >
+        <Half digit={cur} top={false} />
+      </Animated.View>
+      {/* ombra mentre gira */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: TILE_H / 2, height: TILE_H / 2, backgroundColor: '#000', opacity: shade, borderBottomLeftRadius: 7, borderBottomRightRadius: 7 }} />
+      {/* cerniera */}
+      <View style={{ position: 'absolute', left: 0, right: 0, top: TILE_H / 2 - 0.5, height: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} />
+      <View style={{ position: 'absolute', left: -2, top: TILE_H / 2 - 3, width: 3, height: 6, borderRadius: 1, backgroundColor: '#0B0E15' }} />
+      <View style={{ position: 'absolute', right: -2, top: TILE_H / 2 - 3, width: 3, height: 6, borderRadius: 1, backgroundColor: '#0B0E15' }} />
+    </View>
+  );
+}
+
+function FlipGroup({ value, label }: { value: number; label: string }) {
+  const s = String(Math.max(0, value)).padStart(2, '0');
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap: 3 }}>
+        {s.split('').map((d, i) => (
+          <FlipDigit key={`${s.length}-${i}`} value={d} />
+        ))}
+      </View>
+      <Text style={{ color: '#9AA6BC', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 8 }}>{label}</Text>
+    </View>
+  );
+}
+
+function Glow({ color, size, x, y, delay }: { color: string; size: number; x: number; y: number; delay: number }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(v, { toValue: 1, duration: 3200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(v, { toValue: 0, duration: 3200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [v, delay]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.16, 0.32] }),
+        transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.15] }) }],
+      }}
+    />
+  );
+}
+
+function Road() {
+  const move = useRef(new Animated.Value(0)).current;
+  const bob = useRef(new Animated.Value(0)).current;
+  const blink = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const a = Animated.loop(Animated.timing(move, { toValue: 1, duration: 700, easing: Easing.linear, useNativeDriver: true }));
+    const b = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]),
+    );
+    const c = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    a.start();
+    b.start();
+    c.start();
+    return () => (a.stop(), b.stop(), c.stop());
+  }, [move, bob, blink]);
+  return (
+    <View style={{ height: 44, marginTop: space.lg, marginHorizontal: -space.lg, marginBottom: -space.lg, backgroundColor: '#131823', overflow: 'hidden', justifyContent: 'center' }}>
+      <Animated.View style={{ flexDirection: 'row', position: 'absolute', left: -40, transform: [{ translateX: move.interpolate({ inputRange: [0, 1], outputRange: [0, 40] }) }] }}>
+        {Array.from({ length: 16 }, (_, i) => (
+          <View key={i} style={{ width: 22, height: 3, borderRadius: 2, backgroundColor: '#3A4459', marginRight: 18 }} />
+        ))}
+      </Animated.View>
+      <Animated.Text style={{ position: 'absolute', left: '38%', fontSize: 28, transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] }) }] }}>🚗</Animated.Text>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          right: 16,
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          backgroundColor: '#1565C0',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: blink.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+        }}
+      >
+        <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 18 }}>P</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
   const left = Math.max(0, cfg.launchAt - now);
   const d = Math.floor(left / 86_400_000);
@@ -534,38 +724,27 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
   const m = Math.floor((left % 3_600_000) / 60_000);
   const sec = Math.floor((left % 60_000) / 1000);
   const date = new Date(cfg.launchAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.06, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-  const Box = ({ v, l }: { v: number; l: string }) => (
-    <View style={{ flex: 1, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 14, paddingVertical: 10 }}>
-      <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{String(v).padStart(2, '0')}</Text>
-      <Text style={{ color: '#FFE3E3', fontSize: 12, fontWeight: '700' }}>{l}</Text>
-    </View>
-  );
   return (
-    <View style={{ marginTop: space.md, backgroundColor: '#C62828', borderRadius: 22, padding: space.lg, overflow: 'hidden' }}>
-      <Text style={{ color: '#FFE3E3', fontSize: 13, fontWeight: '800', letterSpacing: 1.2 }}>IL {date.toUpperCase()} PARKINGCT SI SVEGLIA</Text>
-      <Animated.Text style={{ color: '#FFFFFF', fontSize: 25, fontWeight: '800', marginTop: 6, lineHeight: 30, transform: [{ scale: pulse }] }}>
-        Basta girare a vuoto.
-      </Animated.Text>
-      <Text style={{ color: '#FFFFFF', fontSize: 15, marginTop: 6, lineHeight: 21 }}>
+    <View style={{ marginTop: space.md, backgroundColor: '#0E121B', borderRadius: 24, padding: space.lg, overflow: 'hidden', borderWidth: 1, borderColor: '#232B3B' }}>
+      <Glow color={RED} size={220} x={-90} y={60} delay={0} />
+      <Glow color="#2F6BFF" size={200} x={190} y={-90} delay={1600} />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: RED, marginRight: 8 }} />
+        <Text style={{ color: '#FF8A80', fontSize: 12, fontWeight: '800', letterSpacing: 1.4 }}>IL {date.toUpperCase()} PARKINGCT SI SVEGLIA</Text>
+      </View>
+      <Text style={{ color: '#FFFFFF', fontSize: 27, fontWeight: '800', marginTop: 8, lineHeight: 32 }}>
+        Basta girare <Text style={{ color: RED }}>a vuoto.</Text>
+      </Text>
+      <Text style={{ color: '#C9D1E0', fontSize: 15, marginTop: 6, lineHeight: 21 }}>
         Ti avviserà dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada.
       </Text>
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
-        <Box v={d} l="GIORNI" />
-        <Box v={h} l="ORE" />
-        <Box v={m} l="MINUTI" />
-        <Box v={sec} l="SECONDI" />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
+        <FlipGroup value={d} label="GIORNI" />
+        <FlipGroup value={h} label="ORE" />
+        <FlipGroup value={m} label="MINUTI" />
+        <FlipGroup value={sec} label="SECONDI" />
       </View>
+      <Road />
     </View>
   );
 }
