@@ -142,6 +142,8 @@ export interface SpotAddress {
   city: string | null;
   province: string | null;
   formatted: string | null;
+  /** nome del luogo, se c'è (es. centro commerciale, parcheggio, piazza) */
+  place?: string | null;
 }
 
 export interface ParkingSpot {

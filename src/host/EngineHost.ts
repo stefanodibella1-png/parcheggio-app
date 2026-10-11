@@ -774,7 +774,9 @@ class Host {
       const max = this.state.config.GEOCODE_MAX_RETRIES;
       const all = await db.getSessions();
       for (const s of all) {
-        if (s.spot.geocodeStatus === 'OK' || s.spot.geocodeStatus === 'NOT_AVAILABLE') continue;
+        // si riprova anche un indirizzo "OK" ma senza via (solo CAP e città)
+        const noStreet = s.spot.geocodeStatus === 'OK' && !s.spot.address?.street;
+        if ((s.spot.geocodeStatus === 'OK' && !noStreet) || s.spot.geocodeStatus === 'NOT_AVAILABLE') continue;
         const n = this.geocodeAttempts.get(s.parkingId) ?? 0;
         if (n >= max) continue;
         this.geocodeAttempts.set(s.parkingId, n + 1);

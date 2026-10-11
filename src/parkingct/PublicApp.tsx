@@ -517,7 +517,11 @@ function CarHere({ session, distanceM, now }: { session: ParkingSession; distanc
   const c = usePalette();
   const p = session.spot.pointFinal;
   const a = session.spot.address;
-  const where = a?.street ? `${a.street}${a.streetNumber ? ` ${a.streetNumber}` : ''}` : a?.formatted ?? 'Posizione salvata';
+  const streetLine = a?.street ? `${a.street}${a.streetNumber ? `, ${a.streetNumber}` : ''}` : null;
+  const where = streetLine ?? a?.place ?? (a?.formatted || 'Posizione salvata');
+  const sub = [streetLine && a?.place ? a.place : null, a?.district && a.district !== a?.city ? a.district : null, a?.city]
+    .filter(Boolean)
+    .join(' · ');
   const since = session.parkedT ?? session.startT;
   const nav = `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}&travelmode=walking`;
   return (
@@ -526,7 +530,7 @@ function CarHere({ session, distanceM, now }: { session: ParkingSession; distanc
         LA TUA AUTO
       </Label>
       <Text style={{ color: c.text, fontSize: 24, fontWeight: '800', marginTop: 4 }}>{where}</Text>
-      {a?.city ? <Label dim>{a.city}</Label> : null}
+      {sub ? <Label dim>{sub}</Label> : null}
       <Label dim style={{ marginTop: 6 }}>
         Parcheggiata alle {fmtTime(since)} · da {fmtDuration(now - since)}
         {distanceM !== null && distanceM > 30 ? ` · sei a ${fmtDistance(distanceM)}` : ''}
