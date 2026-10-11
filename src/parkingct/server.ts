@@ -7,6 +7,7 @@ import { FIREBASE_CONFIG } from '../community/firebaseConfig.ts';
 import { encode } from '../community/geohash.ts';
 import type { ParkingSession } from '../../engine/types.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
+import { checkName } from './moderation.ts';
 import { normalizeCode, sha256Hex } from './sha256.ts';
 
 export interface PublicConfig {
@@ -399,6 +400,16 @@ export interface WallEntry {
   visible: boolean;
   tier: Tier;
   t: number;
+  /** moderazione: 'ok' (approvato modName), 'hidden' (nascosto dal control center), '' (non ancora visto) */
+  mod: string;
+  modName: string;
+}
+
+/** il nome compare nel muro pubblico? */
+export function wallShows(w: WallEntry): boolean {
+  if (!w.visible || !w.name || w.mod === 'hidden') return false;
+  if (w.mod === 'ok' && w.modName === w.name) return true;
+  return checkName(w.name) === 'ok';
 }
 
 export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4 };
@@ -425,6 +436,8 @@ export async function fetchWall(): Promise<WallEntry[] | null> {
         visible: d.fields.visible?.booleanValue ?? false,
         tier: ((str(d.fields.tier) as Tier | null) ?? 'base'),
         t: num(d.fields.t) ?? 0,
+        mod: str(d.fields.mod) ?? '',
+        modName: str(d.fields.modName) ?? '',
       });
     }
     if (!j.nextPageToken) break;
@@ -438,14 +451,19 @@ export async function myWallEntry(): Promise<{ name: string; visible: boolean } 
   return s ? (JSON.parse(s) as { name: string; visible: boolean }) : null;
 }
 
+export type WallSave = 'ok' | 'review' | 'blocked' | 'locked' | 'offline';
+
 /** Salva la scelta per il muro: nome visibile oppure anonimo. */
-export async function saveWallEntry(f: FounderInfo, name: string, visible: boolean): Promise<boolean> {
+export async function saveWallEntry(f: FounderInfo, name: string, visible: boolean): Promise<WallSave> {
   const b = base();
-  if (!b) return false;
+  if (!b) return 'offline';
   const clean = name.replace(/\s+/g, ' ').trim().slice(0, 24);
+  const check = visible ? checkName(clean) : 'ok';
+  if (check === 'blocked') return 'blocked';
   const id = await wallId(f);
   const prev = await myWallEntry();
-  const r = await call(`${b}/wall/${id}?${key()}`, {
+  const mask = ['name', 'visible', 'tier', 't', 'by'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
+  const r = await call(`${b}/wall/${id}?${mask}&${key()}`, {
     method: 'PATCH',
     body: JSON.stringify({
       fields: {
@@ -457,8 +475,10 @@ export async function saveWallEntry(f: FounderInfo, name: string, visible: boole
       },
     }),
   });
-  if (!r?.ok) return false;
+  if (!r) return 'offline';
+  if (r.status === 403) return 'locked';
+  if (!r.ok) return 'offline';
   if (!prev) await kvSet('pc:wallT', String(Date.now())).catch(() => {});
   await kvSet('pc:wall', JSON.stringify({ name: clean, visible: visible && clean.length > 0 })).catch(() => {});
-  return true;
+  return check === 'review' ? 'review' : 'ok';
 }

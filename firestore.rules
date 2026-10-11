@@ -134,11 +134,8 @@ service cloud.firestore {
     // ParkingCT: muro dei fondatori. Id = impronta del codice usato (o "inv-" + codice amico per chi
     // ha invitato abbastanza amici). Solo chi ha usato quel codice può scrivere; il livello è quello
     // del codice, non lo sceglie l'app. Il nome compare solo se l'utente lo vuole (visible).
-    match /wall/{id} {
-      allow read: if true;
-      allow delete: if false;
-      allow create, update: if
-        request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by'])
+    function wallUserOk(id) {
+      return request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by', 'mod', 'modName'])
         && request.resource.data.name is string && request.resource.data.name.size() <= 24
         && request.resource.data.visible is bool
         && request.resource.data.t is number
@@ -153,6 +150,19 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/invites/$(id.replace('^inv-', ''))).data.n
                >= get(/databases/$(database)/documents/config/public).data.inviteFreeAt)
         );
+    }
+
+    // mod / modName = moderazione dal control center ('ok' = approvato quel nome, 'hidden' = nascosto e bloccato)
+    match /wall/{id} {
+      allow read: if true;
+      allow delete: if false;
+      allow create: if wallUserOk(id)
+        && request.resource.data.get('mod', '') == '' && request.resource.data.get('modName', '') == '';
+      allow update: if adminBatch() || (
+        wallUserOk(id)
+        && resource.data.get('mod', '') != 'hidden'
+        && request.resource.data.get('mod', '') == resource.data.get('mod', '')
+        && request.resource.data.get('modName', '') == resource.data.get('modName', ''));
     }
 
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)

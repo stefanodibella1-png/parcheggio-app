@@ -47,6 +47,7 @@ import {
   TIER_BADGE,
   fetchWall,
   myWallEntry,
+  wallShows,
   saveWallEntry,
   type Ad,
   type FounderInfo,
@@ -1405,7 +1406,8 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
         />
       ) : null}
       <Label dim size={13} style={{ marginTop: space.sm }}>
-        🔒 Pubblichiamo solo il nome che scrivi tu (puoi usare un soprannome o le iniziali). Puoi cambiarlo o toglierlo quando vuoi.
+        🔒 Pubblichiamo solo il nome che scrivi tu (puoi usare un soprannome o le iniziali). Puoi cambiarlo o toglierlo quando vuoi. Niente
+        parolacce, link o numeri: i nomi sono controllati.
       </Label>
       {msg ? (
         <Label size={14} color={RED} style={{ marginTop: space.sm }}>
@@ -1422,14 +1424,28 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
             return;
           }
           setBusy(true);
-          const ok = await saveWallEntry(founder, name, visible);
+          const r = await saveWallEntry(founder, name, visible);
           setBusy(false);
-          if (!ok) {
+          if (r === 'blocked') {
+            setMsg('Questo nome non è ammesso: niente parolacce, link o numeri di telefono.');
+            return;
+          }
+          if (r === 'locked') {
+            setMsg('Il tuo nome è stato nascosto dalla moderazione: non si può più modificare.');
+            return;
+          }
+          if (r === 'offline') {
             setMsg('Connessione assente: riprova tra poco.');
             return;
           }
           setSaved({ name: name.trim(), visible: visible && !!name.trim() });
-          setMsg(visible ? 'Fatto: sei nel muro dei fondatori!' : 'Fatto: resti anonimo, ma conti tra i fondatori.');
+          setMsg(
+            !visible
+              ? 'Fatto: resti anonimo, ma conti tra i fondatori.'
+              : r === 'review'
+                ? 'Ricevuto: il nome comparirà nel muro dopo un controllo.'
+                : 'Fatto: sei nel muro dei fondatori!',
+          );
           onSaved?.();
         }}
       />
@@ -1443,7 +1459,7 @@ function WallScreen({ founder, onBack, onJoin }: { founder: FounderInfo | null; 
   useEffect(() => {
     void fetchWall().then(setList);
   }, []);
-  const shown = (list ?? []).filter((w) => w.visible && w.name);
+  const shown = (list ?? []).filter(wallShows);
   const anon = (list ?? []).length - shown.length;
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xl }}>

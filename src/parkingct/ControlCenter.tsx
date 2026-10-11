@@ -8,6 +8,8 @@ import { space, usePalette } from '../ui/theme.ts';
 import {
   changePassword,
   deleteAd,
+  moderateWall,
+  type WallAction,
   generateCode,
   listAds,
   listCodes,
@@ -20,10 +22,11 @@ import {
   type AdminCode,
   type Stats,
 } from './admin.ts';
-import { APK_URL, TIER_LABEL, type Ad, type PublicConfig, type Tier } from './server.ts';
+import { checkName } from './moderation.ts';
+import { APK_URL, TIER_BADGE, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
 
 const RED = '#E53935';
-type Tab = 'numeri' | 'codici' | 'pubblicita' | 'impostazioni';
+type Tab = 'numeri' | 'codici' | 'pubblicita' | 'muro' | 'impostazioni';
 
 export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBack: () => void }) {
   const c = usePalette();
@@ -64,7 +67,8 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
               [
                 ['numeri', 'Numeri'],
                 ['codici', 'Codici'],
-                ['pubblicita', 'Pubblicità'],
+                ['pubblicita', 'Pubbl.'],
+                ['muro', 'Muro'],
                 ['impostazioni', '⚙︎'],
               ] as [Tab, string][]
             ).map(([k, t]) => (
@@ -80,11 +84,21 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
                   backgroundColor: tab === k ? RED : c.cardAlt,
                 }}
               >
-                <Text style={{ color: tab === k ? '#FFFFFF' : c.text, fontWeight: '700' }}>{t}</Text>
+                <Text style={{ color: tab === k ? '#FFFFFF' : c.text, fontWeight: '700', fontSize: 13 }}>{t}</Text>
               </Pressable>
             ))}
           </View>
-          {tab === 'numeri' ? <Numbers /> : tab === 'codici' ? <Codes cfg={cfg} /> : tab === 'pubblicita' ? <Ads /> : <Settings />}
+          {tab === 'numeri' ? (
+            <Numbers />
+          ) : tab === 'codici' ? (
+            <Codes cfg={cfg} />
+          ) : tab === 'pubblicita' ? (
+            <Ads />
+          ) : tab === 'muro' ? (
+            <WallMod />
+          ) : (
+            <Settings />
+          )}
         </>
       ) : null}
     </ScrollView>
@@ -396,6 +410,124 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
       </Card>
       <Label dim size={13} style={{ marginTop: space.md }}>
         I 300 codici del file CSV restano validi come livello base.
+      </Label>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// muro dei fondatori: moderazione
+
+type WallFilter = 'check' | 'all' | 'hidden';
+
+function wallState(w: WallEntry): { label: string; color: string; check: boolean } {
+  if (w.mod === 'hidden') return { label: 'nascosto', color: '#9E9E9E', check: false };
+  if (!w.visible || !w.name) return { label: 'anonimo', color: '#9E9E9E', check: false };
+  if (w.mod === 'ok' && w.modName === w.name) return { label: 'approvato', color: '#2E7D32', check: false };
+  const c = checkName(w.name);
+  if (c !== 'ok') return { label: 'parola sospetta: in attesa', color: RED, check: true };
+  return { label: 'visibile, da controllare', color: '#EF6C00', check: true };
+}
+
+function WallMod() {
+  const c = usePalette();
+  const [list, setList] = useState<WallEntry[] | null>(null);
+  const [filter, setFilter] = useState<WallFilter>('check');
+  const [q, setQ] = useState('');
+  const [limit, setLimit] = useState(50);
+  const [busy, setBusy] = useState(false);
+  const reload = useCallback(async () => setList((await fetchWall()) ?? []), []);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+  const all = list ?? [];
+  const toCheck = all.filter((w) => wallState(w).check);
+  const hidden = all.filter((w) => w.mod === 'hidden');
+  const named = all.filter((w) => w.visible && w.name);
+  const base = filter === 'check' ? toCheck : filter === 'hidden' ? hidden : named;
+  const qq = q.trim().toLowerCase();
+  const rows = (qq ? base.filter((w) => w.name.toLowerCase().includes(qq)) : base).sort((a, b) => b.t - a.t);
+  const act = async (items: WallEntry[], action: WallAction) => {
+    setBusy(true);
+    const ok = await moderateWall(items.map((w) => ({ id: w.id, name: w.name })), action);
+    setBusy(false);
+    if (!ok) Alert.alert('Non riuscito', 'Controlla la connessione o riaccedi.');
+    await reload();
+  };
+  return (
+    <View style={{ marginTop: space.md }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <Big n={all.length} label="fondatori nel muro" />
+        <Big n={named.length} label="con il nome" />
+        <Big n={toCheck.length} label="da controllare" />
+        <Big n={hidden.length} label="nascosti" />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+        {(
+          [
+            ['check', `Da controllare (${toCheck.length})`],
+            ['all', 'Tutti'],
+            ['hidden', 'Nascosti'],
+          ] as [WallFilter, string][]
+        ).map(([k, t]) => (
+          <Pressable
+            key={k}
+            onPress={() => (setFilter(k), setLimit(50))}
+            style={{ flex: 1, minHeight: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, backgroundColor: filter === k ? RED : c.cardAlt }}
+          >
+            <Text style={{ color: filter === k ? '#FFFFFF' : c.text, fontWeight: '700', fontSize: 13, textAlign: 'center' }}>{t}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Field label="Cerca un nome" value={q} onChange={setQ} />
+      {filter === 'check' && rows.length > 0 ? (
+        <Button
+          small
+          title={`✓ Approva tutti quelli senza parole sospette (${rows.filter((w) => checkName(w.name) === 'ok').length})`}
+          busy={busy}
+          style={{ marginTop: space.md, backgroundColor: '#2E7D32' }}
+          onPress={() =>
+            Alert.alert('Approvare tutti?', 'Approva i nomi in elenco che il filtro non segnala. Quelli con parole sospette restano da controllare.', [
+              { text: 'No' },
+              { text: 'Approva', onPress: () => void act(rows.filter((w) => checkName(w.name) === 'ok'), 'approve') },
+            ])
+          }
+        />
+      ) : null}
+      {list === null ? <Label dim style={{ marginTop: space.md }}>Carico…</Label> : null}
+      {list && rows.length === 0 ? (
+        <Label dim style={{ marginTop: space.md }}>{filter === 'check' ? 'Niente da controllare. 👍' : 'Nessun nome.'}</Label>
+      ) : null}
+      {rows.slice(0, limit).map((w) => {
+        const st = wallState(w);
+        return (
+          <Card key={w.id} style={{ marginTop: space.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ width: 30, fontSize: 18 }}>{TIER_BADGE[w.tier]}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: c.text, fontSize: 16, fontWeight: '700' }}>{w.name || '(anonimo)'}</Text>
+                <Label size={12} color={st.color}>
+                  {st.label} · {new Date(w.t).toLocaleDateString('it-IT')}
+                </Label>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: space.sm }}>
+              {w.mod !== 'hidden' && w.name && !(w.mod === 'ok' && w.modName === w.name) ? (
+                <Button small title="✓ Approva" style={{ flex: 1, backgroundColor: '#2E7D32' }} busy={busy} onPress={() => void act([w], 'approve')} />
+              ) : null}
+              {w.mod !== 'hidden' && w.name ? (
+                <Button small variant="danger" title="🚫 Nascondi" style={{ flex: 1 }} busy={busy} onPress={() => void act([w], 'hide')} />
+              ) : null}
+              {w.mod === 'hidden' ? <Button small variant="ghost" title="↩︎ Ripristina" style={{ flex: 1 }} busy={busy} onPress={() => void act([w], 'restore')} /> : null}
+            </View>
+          </Card>
+        );
+      })}
+      {rows.length > limit ? <Button small variant="ghost" title={`Mostra altri (${rows.length - limit})`} style={{ marginTop: space.md }} onPress={() => setLimit(limit + 50)} /> : null}
+      <Label dim size={13} style={{ marginTop: space.md }}>
+        I nomi con parolacce, link o numeri vengono rifiutati già nell'app. Quelli con parole dubbie restano nascosti finché non li approvi. Gli altri
+        compaiono subito: qui li controlli quando vuoi. "Nascondi" toglie il nome dal muro e impedisce di riscriverlo (la persona resta tra gli
+        anonimi).
       </Label>
     </View>
   );

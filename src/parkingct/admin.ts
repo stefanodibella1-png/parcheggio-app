@@ -20,7 +20,13 @@ function docName(path: string): string {
   return `projects/${FIREBASE_CONFIG!.projectId}/databases/(default)/documents/${path}`;
 }
 
-type Write = { update?: { name: string; fields: Record<string, FsVal> }; delete?: string; currentDocument?: { exists: boolean }; updateTransforms?: object[] };
+type Write = {
+  update?: { name: string; fields: Record<string, FsVal> };
+  delete?: string;
+  currentDocument?: { exists: boolean };
+  updateTransforms?: object[];
+  updateMask?: { fieldPaths: string[] };
+};
 
 async function commit(writes: Write[]): Promise<boolean> {
   const b = base();
@@ -264,4 +270,33 @@ export async function saveAd(a: Ad): Promise<boolean> {
 export async function deleteAd(id: string): Promise<boolean> {
   if (!vault) return false;
   return commit([token(), { delete: docName(`ads/${id}`) }]);
+}
+
+// ---------------------------------------------------------------------------------------
+// moderazione del muro dei fondatori
+
+export type WallAction = 'approve' | 'hide' | 'restore';
+
+/** Approva, nasconde (e blocca) o ripristina uno o più nomi del muro. */
+export async function moderateWall(entries: { id: string; name: string }[], action: WallAction): Promise<boolean> {
+  if (!vault || entries.length === 0) return false;
+  for (let i = 0; i < entries.length; i += 400) {
+    const chunk = entries.slice(i, i + 400);
+    const ok = await commit([
+      token(),
+      ...chunk.map((e) => ({
+        update: {
+          name: docName(`wall/${e.id}`),
+          fields: {
+            mod: { stringValue: action === 'approve' ? 'ok' : action === 'hide' ? 'hidden' : '' },
+            modName: { stringValue: action === 'restore' ? '' : e.name },
+          },
+        },
+        updateMask: { fieldPaths: ['mod', 'modName'] },
+        currentDocument: { exists: true },
+      })),
+    ]);
+    if (!ok) return false;
+  }
+  return true;
 }
