@@ -1,19 +1,10 @@
 rules_version = '2';
-// PARCHEGGIO — regole della community (prototipo, senza account).
-// Si possono leggere e scrivere SOLO documenti "spots" ben formati:
-// coordinate, cella geohash, tipo, orari, indirizzo. Niente altro.
+// PARCHEGGIO / ParkingCT — regole del server (senza account utente).
+// Ogni collezione accetta solo documenti ben formati; nessun dato personale.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // conferme automatiche: un utente ha davvero parcheggiato su un posto ricevuto
-    match /validations/{id} {
-      allow read: if true;
-      allow create, update: if
-        request.resource.data.keys().hasOnly(['spotId', 'latitude', 'longitude', 'geohash6', 't', 'deviceId'])
-        && request.resource.data.latitude is number
-        && request.resource.data.longitude is number
-        && request.resource.data.geohash6 is string
-        && request.resource.data.geohash6.size() == 6;
-    }
+
+    // posti che si liberano (community)
     match /spots/{id} {
       allow read: if true;
       allow delete: if true;
@@ -27,6 +18,58 @@ service cloud.firestore {
         && request.resource.data.geohash6.size() == 6
         && request.resource.data.expiresAt is number
         && request.resource.data.expiresAt < request.resource.data.createdAt + 3600000;
+    }
+
+    // conferme automatiche: un utente ha davvero parcheggiato su un posto ricevuto
+    match /validations/{id} {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['spotId', 'latitude', 'longitude', 'geohash6', 't', 'deviceId'])
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.geohash6 is string
+        && request.resource.data.geohash6.size() == 6;
+    }
+
+    // ParkingCT: configurazione del lancio (scritta solo dal server)
+    match /config/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ParkingCT: telefoni per zona (cella geohash5, ~5 km), per il contatore "N su 1000"
+    match /devices/{id} {
+      allow read: if true;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['zone', 't', 'founder'])
+        && request.resource.data.zone is string
+        && request.resource.data.zone.size() == 5
+        && request.resource.data.t is number
+        && request.resource.data.founder is bool;
+    }
+
+    // ParkingCT: codici dei sostenitori fondatori (id = impronta SHA-256 del codice).
+    // Si legge solo il singolo codice (impossibile elencarli); si usa una volta sola.
+    match /codes/{hash} {
+      allow get: if true;
+      allow list, create, delete: if false;
+      allow update: if
+        resource.data.usedBy == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy is string
+        && request.resource.data.usedAt is number;
+    }
+
+    // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)
+    match /parkings/{id} {
+      allow read: if false;
+      allow create: if
+        request.resource.data.keys().hasOnly(['latitude', 'longitude', 'geohash7', 'parkedT', 'durationS',
+          'outcome', 'exitedOnFoot', 'quality', 'atFuel', 'gpsLost', 'deviceId'])
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.geohash7 is string
+        && request.resource.data.geohash7.size() == 7;
     }
   }
 }

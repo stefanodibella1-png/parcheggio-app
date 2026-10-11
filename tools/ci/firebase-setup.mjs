@@ -39,6 +39,32 @@ if (rel.status === 404) rel = await api('POST', `https://firebaserules.googleapi
 if (!rel.ok) fail('Regole (release)', rel);
 console.log('::notice title=Firestore regole::pubblicate');
 
+// 1b) ParkingCT: configurazione del lancio e codici dei sostenitori (scritti con i permessi del server)
+const fsBase = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents`;
+const cfgFile = JSON.parse(readFileSync('tools/ci/parkingct-config.json', 'utf8'));
+const launchMs = Date.parse(cfgFile.launchAt);
+const cfgDoc = await api('PATCH', `${fsBase}/config/public`, {
+  fields: {
+    launchAt: { doubleValue: launchMs },
+    supportUrl: { stringValue: cfgFile.supportUrl ?? '' },
+    zoneTarget: { doubleValue: cfgFile.zoneTarget ?? 1000 },
+    zoneName: { stringValue: cfgFile.zoneName ?? '' },
+  },
+});
+if (!cfgDoc.ok) fail('Configurazione ParkingCT', cfgDoc);
+console.log(`::notice title=ParkingCT::lancio ${cfgFile.launchAt}`);
+const hashes = readFileSync('tools/ci/founder-codes.sha256', 'utf8').split('\n').map((x) => x.trim()).filter((x) => /^[0-9a-f]{64}$/.test(x));
+let added = 0;
+for (const h of hashes) {
+  // solo se non esiste già: un codice usato non torna mai libero
+  const r = await api('PATCH', `${fsBase}/codes/${h}?currentDocument.exists=false`, {
+    fields: { usedBy: { nullValue: null }, usedAt: { nullValue: null } },
+  });
+  if (r.ok) added++;
+  else if (r.status !== 409 && r.status !== 400 && r.status !== 412) fail('Codici sostenitori', r);
+}
+console.log(`::notice title=Codici sostenitori::${hashes.length} totali, ${added} nuovi`);
+
 // 2) configurazione dell'app web
 const list = await api('GET', `https://firebase.googleapis.com/v1beta1/projects/${pid}/webApps`);
 if (!list.ok) fail('App web (elenco)', list);

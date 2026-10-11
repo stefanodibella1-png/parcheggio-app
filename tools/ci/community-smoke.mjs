@@ -18,3 +18,16 @@ const d = await fetch(`${base}/spots/ci-test?key=${apiKey}`, { method: 'DELETE' 
 const v = await fetch(`${base}/validations/ci-test?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: f({ spotId: 'ci-test', latitude: 37.5079, longitude: 15.083, geohash6: 'sqdxqe', t: now, deviceId: 'ci' }) }) });
 if (!v.ok) { console.log(`::error title=Community conferme::HTTP ${v.status} ${(await v.text()).slice(0, 300).replace(/\n/g, ' ')}`); process.exit(1); }
 console.log(`::notice title=Community prova::conferma automatica (posto preso) OK; scrittura OK, lettura per zona OK, cancellazione ${d.ok ? 'OK' : 'KO ' + d.status}, documento non valido ${bad.ok ? 'ACCETTATO (regole da rivedere)' : 'rifiutato dalle regole OK'}`);
+
+// ParkingCT: configurazione leggibile, registrazione per zona e conteggio
+const cfg = await fetch(`${base}/config/public?key=${apiKey}`);
+if (!cfg.ok) { console.log(`::error title=ParkingCT config::HTTP ${cfg.status}`); process.exit(1); }
+const dv = await fetch(`${base}/devices/ci-test?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { zone: { stringValue: 'zzzzz' }, t: { doubleValue: now }, founder: { booleanValue: false } } }) });
+if (!dv.ok) { console.log(`::error title=ParkingCT device::HTTP ${dv.status} ${(await dv.text()).slice(0, 300).replace(/\n/g, ' ')}`); process.exit(1); }
+const cnt = await fetch(`${base}:runAggregationQuery?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ structuredAggregationQuery: { structuredQuery: { from: [{ collectionId: 'devices' }], where: { fieldFilter: { field: { fieldPath: 'zone' }, op: 'EQUAL', value: { stringValue: 'zzzzz' } } } }, aggregations: [{ alias: 'n', count: {} }] } }) });
+const cj = cnt.ok ? await cnt.json() : null;
+const n = cj?.[0]?.result?.aggregateFields?.n?.integerValue;
+if (!n) { console.log(`::error title=ParkingCT conteggio::HTTP ${cnt.status} ${JSON.stringify(cj).slice(0, 300)}`); process.exit(1); }
+const codeBad = await fetch(`${base}/codes/${'0'.repeat(64)}?key=${apiKey}`);
+const listCodes = await fetch(`${base}/codes?key=${apiKey}`);
+console.log(`::notice title=ParkingCT prova::config OK, registrazione zona OK, conteggio ${n}, codice inesistente → ${codeBad.status}, elenco codici → ${listCodes.status} (deve essere 403)`);
