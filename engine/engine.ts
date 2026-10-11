@@ -85,6 +85,8 @@ interface Memory {
   lastActivityAny: ActivitySample | null;
   /** ultimo campione activity a piedi (WALKING/ON_FOOT/RUNNING) */
   lastWalkActT: number | null;
+  /** arrivato vicino all'auto già in movimento su un veicolo (non a piedi) */
+  arrivedInVehicle: boolean;
   steps: { t: number; steps: number }[]; // ultimi 20 s
   hasMotion: boolean;
 
@@ -185,6 +187,7 @@ export class DetectionEngine {
       lastValidActivity: null,
       lastActivityAny: null,
       lastWalkActT: null,
+      arrivedInVehicle: false,
       steps: [],
       hasMotion: false,
       vehicleOkSince: null,
@@ -986,6 +989,21 @@ export class DetectionEngine {
     const cfg = this.cfg;
     const m = this.m;
     const d = this.distanceFromSpot(c.now);
+    // Arrivato vicino al punto già a bordo di un veicolo (es. riportato da qualcuno, o tornato
+    // con la propria auto dopo una partenza non vista per GPS sospeso): quel movimento è un
+    // arrivo, non una partenza. Si aspetta che il veicolo si fermi; se invece prosegue, si torna lontani.
+    if (m.state === 'USER_RETURNING' && m.arrivedInVehicle) {
+      if (c.kmh !== null && c.kmh <= cfg.MAX_PARKING_SPEED) {
+        m.arrivedInVehicle = false;
+      } else {
+        if (d !== null && d > cfg.RETURN_RADIUS + 20) {
+          m.arrivedInVehicle = false;
+          m.returnSeries = [];
+          this.transition('PARKED_USER_AWAY', `passato vicino all'auto su un veicolo senza fermarsi (${d} m)`, c.now);
+        }
+        return;
+      }
+    }
     if (c.walkingConfirmed && d !== null) {
       if (m.state === 'PARKED' && d > cfg.AWAY_DISTANCE) {
         m.returnSeries = [];
@@ -1053,7 +1071,8 @@ export class DetectionEngine {
     if (!c.vehicleConfirmed && c.kmh !== null && c.kmh <= cfg.WALKING_SPEED_MAX) m.awayVehicleLogged = false;
 
     if (d !== null && d <= cfg.RETURN_RADIUS) {
-      this.transition('USER_RETURNING', `di nuovo vicino all'auto (${d} m)`, c.now);
+      m.arrivedInVehicle = c.vehicleConfirmed || (c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX);
+      this.transition('USER_RETURNING', `di nuovo vicino all'auto (${d} m)${m.arrivedInVehicle ? ', arrivato in veicolo' : ''}`, c.now);
       return;
     }
     const rs = this.returnScore(c.now);
