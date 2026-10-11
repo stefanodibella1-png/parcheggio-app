@@ -891,12 +891,20 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
             <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>Basta girare a vuoto.</Text>
           </View>
         </Piece>
-        <Piece delay={2300}>
-          <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginTop: space.md, textAlign: 'center' }}>Cerchi parcheggio?</Text>
-          <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: 4, lineHeight: 21, textAlign: 'center' }}>
-            Trova un posto libero, minuti prima che si liberi.{'\n'}Chi sta andando via ti avvisa in automatico.
-          </Text>
-        </Piece>
+        <View style={{ alignSelf: 'stretch', marginTop: space.lg }}>
+          <Piece delay={2300}>
+            <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800' }}>Cerchi parcheggio?</Text>
+            {[
+              { icon: '⏱️', text: 'Trova un posto libero, minuti prima che si liberi.' },
+              { icon: '🔔', text: 'Chi sta andando via ti avvisa in automatico.' },
+            ].map((r) => (
+              <View key={r.icon} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
+                <Text style={{ width: 28, fontSize: 16, lineHeight: 22 }}>{r.icon}</Text>
+                <Text style={{ flex: 1, color: '#D7DEEA', fontSize: 15, lineHeight: 22 }}>{r.text}</Text>
+              </View>
+            ))}
+          </Piece>
+        </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
           <FlipGroup value={d} label="GIORNI" />
           <FlipGroup value={h} label="ORE" />
