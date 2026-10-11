@@ -6,8 +6,8 @@ import { Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, 
 import { Button, Card, Label } from '../ui/components/basics.tsx';
 import { space, usePalette } from '../ui/theme.ts';
 import {
+  changePassword,
   deleteAd,
-  firstAccess,
   generateCode,
   listAds,
   listCodes,
@@ -15,17 +15,15 @@ import {
   login,
   logout,
   pretty,
-  resetPassword,
   resume,
   saveAd,
-  type AdStats,
   type AdminCode,
   type Stats,
 } from './admin.ts';
 import { APK_URL, TIER_LABEL, type Ad, type PublicConfig, type Tier } from './server.ts';
 
 const RED = '#E53935';
-type Tab = 'numeri' | 'codici' | 'pubblicita';
+type Tab = 'numeri' | 'codici' | 'pubblicita' | 'impostazioni';
 
 export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBack: () => void }) {
   const c = usePalette();
@@ -67,13 +65,14 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
                 ['numeri', 'Numeri'],
                 ['codici', 'Codici'],
                 ['pubblicita', 'Pubblicità'],
+                ['impostazioni', '⚙︎'],
               ] as [Tab, string][]
             ).map(([k, t]) => (
               <Pressable
                 key={k}
                 onPress={() => setTab(k)}
                 style={{
-                  flex: 1,
+                  flex: k === 'impostazioni' ? 0.5 : 1,
                   minHeight: 44,
                   borderRadius: 12,
                   alignItems: 'center',
@@ -85,7 +84,7 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
               </Pressable>
             ))}
           </View>
-          {tab === 'numeri' ? <Numbers /> : tab === 'codici' ? <Codes cfg={cfg} /> : <Ads />}
+          {tab === 'numeri' ? <Numbers /> : tab === 'codici' ? <Codes cfg={cfg} /> : tab === 'pubblicita' ? <Ads /> : <Settings />}
         </>
       ) : null}
     </ScrollView>
@@ -144,52 +143,52 @@ function Field({
 }
 
 function Login({ onIn }: { onIn: () => void }) {
-  const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true);
+    const r = await login(pwd);
+    setBusy(false);
+    if (r.ok) onIn();
+    else setMsg(r.msg);
+  };
   return (
     <Card style={{ marginTop: space.md }}>
-      <Label dim size={14}>
-        Accesso riservato al proprietario.
-      </Label>
-      <Field label="Email" value={email} onChange={setEmail} keyboard="email-address" />
-      <Field label="Password" value={pwd} onChange={setPwd} secure />
+      <Field label="Password admin" value={pwd} onChange={(v) => (setPwd(v), setMsg(null))} secure />
       {msg ? (
         <Label style={{ marginTop: space.sm }} color={RED}>
           {msg}
         </Label>
       ) : null}
+      <Button title="Entra" busy={busy} style={{ marginTop: space.md, backgroundColor: RED }} onPress={go} />
+    </Card>
+  );
+}
+
+function Settings() {
+  const [oldP, setOldP] = useState('');
+  const [newP, setNewP] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <Card style={{ marginTop: space.md }}>
+      <Label bold>Cambia password admin</Label>
+      <Field label="Password attuale" value={oldP} onChange={setOldP} secure />
+      <Field label="Nuova password (almeno 6 caratteri)" value={newP} onChange={setNewP} secure />
+      {msg ? <Label style={{ marginTop: space.sm }}>{msg}</Label> : null}
       <Button
-        title="Accedi"
+        title="Cambia password"
         busy={busy}
         style={{ marginTop: space.md, backgroundColor: RED }}
         onPress={async () => {
           setBusy(true);
-          const r = await login(email, pwd);
+          setMsg(await changePassword(oldP, newP));
           setBusy(false);
-          if (r.ok) onIn();
-          else setMsg(r.msg);
+          setOldP('');
+          setNewP('');
         }}
       />
-      <Button
-        small
-        variant="ghost"
-        title="Primo accesso: crea la password"
-        style={{ marginTop: space.sm }}
-        onPress={async () => {
-          if (pwd.length < 8) {
-            setMsg('Scegli una password di almeno 8 caratteri, poi tocca di nuovo.');
-            return;
-          }
-          setBusy(true);
-          const r = await firstAccess(email, pwd);
-          setBusy(false);
-          if (r.ok) onIn();
-          else setMsg(r.msg);
-        }}
-      />
-      <Button small variant="ghost" title="Password dimenticata" style={{ marginTop: space.sm }} onPress={async () => setMsg(await resetPassword(email))} />
     </Card>
   );
 }
@@ -210,7 +209,7 @@ function Big({ n, label }: { n: number | null | string; label: string }) {
 }
 
 function Numbers() {
-  const [s, setS] = useState<Stats | null>(null);
+  const [s, setS] = useState<Stats | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
@@ -222,21 +221,25 @@ function Numbers() {
   }, [load]);
   return (
     <View style={{ marginTop: space.md }}>
-      <Button small variant="ghost" title={busy ? 'Aggiorno…' : 'Aggiorna'} busy={busy} onPress={load} />
-      {s && !s.ok ? (
-        <Label color={RED} style={{ marginTop: space.sm }}>
-          Il server non ha risposto con i dati: controlla la connessione o riaccedi.
+      <Button small variant="ghost" title="Aggiorna" busy={busy} onPress={load} />
+      {s === null ? (
+        <Label dim style={{ marginTop: space.sm }}>
+          I numeri vengono calcolati dal server ogni 15 minuti: i primi arrivano entro un quarto d'ora.
         </Label>
       ) : null}
       {s ? (
         <>
+          <Label dim size={13} style={{ marginTop: space.sm }}>
+            Aggiornati alle {new Date(s.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} del{' '}
+            {new Date(s.at).toLocaleDateString('it-IT')} (ogni 15 minuti)
+          </Label>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             <Big n={s.devices} label="installazioni" />
             <Big n={s.active24h} label="attive nelle ultime 24 ore" />
             <Big n={s.active7d} label="attive negli ultimi 7 giorni" />
             <Big n={`${s.newToday} / ${s.new7d}`} label="nuove oggi / 7 giorni" />
             <Big n={s.founders} label="fondatori attivati" />
-            <Big n={s.codesGenerated} label="codici generati qui" />
+            <Big n={`${s.codesUsed} / ${s.codesGenerated}`} label="codici usati / generati qui" />
             <Big n={s.parkings} label="parcheggi raccolti" />
             <Big n={s.parkings7d} label="parcheggi ultimi 7 giorni" />
             <Big n={s.invitedTotal} label="amici invitati" />
@@ -311,7 +314,12 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<AdminCode | null>(null);
   const [list, setList] = useState<AdminCode[] | null>(null);
-  const reload = useCallback(async () => setList(await listCodes()), []);
+  const [used, setUsed] = useState<Set<string>>(new Set());
+  const reload = useCallback(async () => {
+    setList(await listCodes());
+    const st = await loadStats();
+    setUsed(new Set(st?.codesUsedSet ?? []));
+  }, []);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -377,7 +385,7 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
           <Pressable key={a.hash} onPress={() => Share.share({ message: shareCodeMessage(cfg, a) })} style={{ marginTop: space.sm }}>
             <Label>
               {pretty(a.code)} · {a.tier}
-              {a.used ? ' · ✅ attivato' : ' · in attesa'}
+              {used.has(a.hash) ? ' · ✅ attivato' : ''}
             </Label>
             <Label dim size={13}>
               {a.note || 'senza nota'}
@@ -399,9 +407,13 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
 const EMPTY_AD: Ad = { id: '', sponsor: '', title: '', text: '', cta: 'Scopri', url: '', image: '', zone: '', active: true, until: 0, weight: 1 };
 
 function Ads() {
-  const [list, setList] = useState<(Ad & AdStats)[] | null>(null);
+  const [list, setList] = useState<Ad[] | null>(null);
+  const [stats, setStats] = useState<Stats['ads']>({});
   const [edit, setEdit] = useState<Ad | null>(null);
-  const reload = useCallback(async () => setList(await listAds()), []);
+  const reload = useCallback(async () => {
+    setList(await listAds());
+    setStats((await loadStats())?.ads ?? {});
+  }, []);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -412,7 +424,8 @@ function Ads() {
       {list === null ? <Label dim style={{ marginTop: space.md }}>Carico…</Label> : null}
       {list?.length === 0 ? <Label dim style={{ marginTop: space.md }}>Nessuna pubblicità.</Label> : null}
       {(list ?? []).map((a) => {
-        const ctr = a.views ? Math.round(((a.clicks ?? 0) / a.views) * 1000) / 10 : 0;
+        const st = stats[a.id];
+        const ctr = st?.views ? Math.round((st.clicks / st.views) * 1000) / 10 : 0;
         return (
           <Pressable key={a.id} onPress={() => setEdit(a)}>
             <Card style={{ marginTop: space.md }} accent={a.active ? RED : undefined}>
@@ -424,7 +437,7 @@ function Ads() {
                 {a.until ? ` · fino al ${new Date(a.until).toLocaleDateString('it-IT')}` : ''}
               </Label>
               <Label style={{ marginTop: 4 }}>
-                {a.views ?? '–'} visualizzazioni · {a.clicks ?? '–'} tocchi · {ctr}%
+                {st?.views ?? 0} visualizzazioni · {st?.clicks ?? 0} tocchi · {ctr}% (dati ogni 15 min)
               </Label>
             </Card>
           </Pressable>

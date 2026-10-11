@@ -4,13 +4,42 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Control center segreto: solo l'account del proprietario, con email verificata.
-    // (nel file c'è solo l'impronta SHA-256 dell'email, non l'email)
-    function isAdmin() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && hashing.sha256(request.auth.token.email.lower()).toHexString().lower()
-           == 'de88b4d414e4020545351bf4badea9b14f78bb6baeddd03e408ec6341c05af07';
+    // Control center segreto (7 tocchi sul logo + password admin, cambiabile dall'app).
+    // admin/key = { s: impronta della password, v: id della cassaforte } — nessuno può leggerlo.
+    // Chi conosce la password ricava s, legge gate/{s} e ottiene v; tutti i dati riservati
+    // stanno in vault/{v}. Le scritture pubbliche dell'admin (codici, pubblicità) sono valide
+    // solo se nello stesso invio viene scritto vault/{v}/tokens/w con l'ora del server.
+    function adminKey() {
+      return get(/databases/$(database)/documents/admin/key).data;
+    }
+    function adminBatch() {
+      return exists(/databases/$(database)/documents/admin/key)
+        && getAfter(/databases/$(database)/documents/vault/$(adminKey().v)/tokens/w).data.t == request.time;
+    }
+
+    match /admin/key {
+      allow read, delete: if false;
+      // prima volta: si sceglie la password
+      allow create: if request.resource.data.keys().hasOnly(['s', 'v', 'prev'])
+        && request.resource.data.s is string && request.resource.data.s.size() == 64
+        && request.resource.data.v is string && request.resource.data.v.size() >= 20;
+      // cambio password: serve quella attuale
+      allow update: if request.resource.data.keys().hasOnly(['s', 'v', 'prev'])
+        && request.resource.data.prev == resource.data.s
+        && request.resource.data.v == resource.data.v
+        && request.resource.data.s is string && request.resource.data.s.size() == 64;
+    }
+
+    match /gate/{s} {
+      allow get: if exists(/databases/$(database)/documents/admin/key) && s == adminKey().s;
+      allow create: if s == getAfter(/databases/$(database)/documents/admin/key).data.s
+        && request.resource.data.keys().hasOnly(['v'])
+        && request.resource.data.v == getAfter(/databases/$(database)/documents/admin/key).data.v;
+      allow list, update, delete: if false;
+    }
+
+    match /vault/{v}/{document=**} {
+      allow read, write: if exists(/databases/$(database)/documents/admin/key) && v == adminKey().v;
     }
 
     // posti che si liberano (community)
@@ -43,12 +72,12 @@ service cloud.firestore {
     // ParkingCT: configurazione del lancio (scritta solo dal server)
     match /config/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
-    // ParkingCT: telefoni per zona (cella geohash5, ~5 km). I numeri li vede solo il control center.
+    // ParkingCT: telefoni per zona (cella geohash5, ~5 km). I numeri li calcola il server per il control center.
     match /devices/{id} {
-      allow read: if isAdmin();
+      allow read: if false;
       allow create, update: if
         request.resource.data.keys().hasOnly(['zone', 't', 'founder', 'first', 'tier', 'v'])
         && request.resource.data.zone is string
@@ -62,28 +91,24 @@ service cloud.firestore {
     // Livelli: base, oro, platino (con codici regalo), regalo.
     match /codes/{hash} {
       allow get: if true;
-      allow list, create, delete: if isAdmin();
-      allow update: if isAdmin() || (
+      allow list, delete: if false;
+      allow create: if adminBatch();
+      allow update: if adminBatch() || (
         resource.data.usedBy == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
         && request.resource.data.usedBy is string
         && request.resource.data.usedAt is number);
     }
 
-    // ParkingCT: registro dei codici generati dal control center (con il codice in chiaro)
-    match /adminCodes/{hash} {
-      allow read, write: if isAdmin();
-    }
-
     // ParkingCT: pubblicità (scritte dal control center, lette dall'app)
     match /ads/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if adminBatch();
     }
 
     // ParkingCT: visualizzazioni e tocchi delle pubblicità (anonimi)
     match /adEvents/{id} {
-      allow read, delete: if isAdmin();
+      allow read, delete: if false;
       allow create: if
         request.resource.data.keys().hasOnly(['adId', 'kind', 't', 'zone'])
         && request.resource.data.adId is string
@@ -94,13 +119,13 @@ service cloud.firestore {
     // ParkingCT: amici invitati (id = codice invito di chi invita). Ogni nuovo telefono aggiunge 1.
     match /invites/{code} {
       allow get: if true;
-      allow list, delete: if isAdmin();
+      allow list, delete: if false;
       allow create: if
         request.resource.data.keys().hasOnly(['n', 't'])
         && request.resource.data.n == 1
         && request.resource.data.t is number
         && code.size() <= 12;
-      allow update: if isAdmin() || (
+      allow update: if (
         request.resource.data.keys().hasOnly(['n', 't'])
         && request.resource.data.n == resource.data.n + 1
         && request.resource.data.t is number);
@@ -108,7 +133,7 @@ service cloud.firestore {
 
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)
     match /parkings/{id} {
-      allow read: if isAdmin();
+      allow read: if false;
       allow create: if
         request.resource.data.keys().hasOnly(['latitude', 'longitude', 'geohash7', 'parkedT', 'durationS',
           'outcome', 'exitedOnFoot', 'quality', 'atFuel', 'gpsLost', 'deviceId'])

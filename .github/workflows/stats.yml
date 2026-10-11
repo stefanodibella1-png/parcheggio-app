@@ -1,0 +1,39 @@
+name: Statistiche ParkingCT (control center)
+
+# Ogni 15 minuti calcola i numeri per il control center segreto dell'app.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ci/stats.mjs'
+      - '.github/workflows/stats.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: stats
+  cancel-in-progress: true
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Credenziali
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+          PID=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project_id)" "$RUNNER_TEMP/sa.json")
+          echo "PROJECT_ID=$PID" >> "$GITHUB_ENV"
+      - name: Calcola
+        run: |
+          mkdir -p "$RUNNER_TEMP/fb" && (cd "$RUNNER_TEMP/fb" && npm init -y >/dev/null && npm install google-auth-library@9 --no-audit --no-fund >/dev/null)
+          cp tools/ci/stats.mjs "$RUNNER_TEMP/fb/stats.mjs"
+          node "$RUNNER_TEMP/fb/stats.mjs"

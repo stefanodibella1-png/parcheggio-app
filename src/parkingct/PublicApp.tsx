@@ -29,7 +29,7 @@ import { Checklist, CommunityCard, useHost, useNow } from '../ui/components/live
 import { fmtDistance, fmtDuration, fmtTime } from '../ui/format.ts';
 import { space, usePalette } from '../ui/theme.ts';
 import type { ParkingSession } from '../../engine/types.ts';
-import { kvGet, kvSet } from '../storage/db.ts';
+import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
   TIER_LABEL,
@@ -326,6 +326,7 @@ function Home({
   const [upd, setUpd] = useState(false);
   const [ad, setAd] = useState<Ad | null>(null);
   const [invites, setInvites] = useState<number | null>(null);
+  const [parks, setParks] = useState<number | null>(null);
   const taps = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
 
   useEffect(() => {
@@ -355,6 +356,24 @@ function Home({
       setInvites(n);
     })();
   }, [founder]);
+
+  // parcheggi ricordati da questo telefono (i test vecchi si cancellano: si tiene un contatore)
+  const sessionId = s.session?.parkingId ?? null;
+  useEffect(() => {
+    void (async () => {
+      const seen = new Set<string>(JSON.parse((await kvGet('pc:parkIds').catch(() => null)) || '[]') as string[]);
+      let total = Number((await kvGet('pc:parkCount').catch(() => null)) ?? 0);
+      const all = await getSessions().catch(() => []);
+      for (const x of all) {
+        if (x.parkedT === null || seen.has(x.parkingId)) continue;
+        seen.add(x.parkingId);
+        total++;
+      }
+      await kvSet('pc:parkIds', JSON.stringify([...seen].slice(-300))).catch(() => {});
+      await kvSet('pc:parkCount', String(total)).catch(() => {});
+      setParks(total);
+    })();
+  }, [sessionId]);
 
   useEffect(() => {
     if (!founder && cfg && cfg.inviteFreeAt > 0 && invites !== null && invites >= cfg.inviteFreeAt) onInviteReward();
@@ -447,10 +466,14 @@ function Home({
           <CommunityCard community={s.community} now={now} />
         </View>
       ) : cfg ? (
-        <LaunchCard cfg={cfg} now={now} />
+        <CountdownHero cfg={cfg} now={now} />
       ) : null}
 
+      {!launched ? <MyMap parks={parks} /> : null}
+
       {ad ? <AdCard ad={ad} zone={zone} /> : null}
+
+      {!launched ? <ComingSoon /> : null}
 
       {/* sostenitore */}
       {!founder ? (
@@ -504,22 +527,134 @@ function CarHere({ session, distanceM, now }: { session: ParkingSession; distanc
   );
 }
 
-function LaunchCard({ cfg, now }: { cfg: PublicConfig; now: number }) {
-  const c = usePalette();
-  const days = Math.max(0, Math.ceil((cfg.launchAt - now) / 86_400_000));
+function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
+  const left = Math.max(0, cfg.launchAt - now);
+  const d = Math.floor(left / 86_400_000);
+  const h = Math.floor((left % 86_400_000) / 3_600_000);
+  const m = Math.floor((left % 3_600_000) / 60_000);
+  const sec = Math.floor((left % 60_000) / 1000);
   const date = new Date(cfg.launchAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.06, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  const Box = ({ v, l }: { v: number; l: string }) => (
+    <View style={{ flex: 1, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 14, paddingVertical: 10 }}>
+      <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{String(v).padStart(2, '0')}</Text>
+      <Text style={{ color: '#FFE3E3', fontSize: 12, fontWeight: '700' }}>{l}</Text>
+    </View>
+  );
+  return (
+    <View style={{ marginTop: space.md, backgroundColor: '#C62828', borderRadius: 22, padding: space.lg, overflow: 'hidden' }}>
+      <Text style={{ color: '#FFE3E3', fontSize: 13, fontWeight: '800', letterSpacing: 1.2 }}>IL {date.toUpperCase()} PARKINGCT SI SVEGLIA</Text>
+      <Animated.Text style={{ color: '#FFFFFF', fontSize: 25, fontWeight: '800', marginTop: 6, lineHeight: 30, transform: [{ scale: pulse }] }}>
+        Basta girare a vuoto.
+      </Animated.Text>
+      <Text style={{ color: '#FFFFFF', fontSize: 15, marginTop: 6, lineHeight: 21 }}>
+        Ti avviserà dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada.
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+        <Box v={d} l="GIORNI" />
+        <Box v={h} l="ORE" />
+        <Box v={m} l="MINUTI" />
+        <Box v={sec} l="SECONDI" />
+      </View>
+    </View>
+  );
+}
+
+const BADGES = [
+  { n: 1, name: 'Primo parcheggio', icon: '🚗' },
+  { n: 5, name: 'Abitudinario', icon: '🅿️' },
+  { n: 20, name: 'Conoscitore di Catania', icon: '🗺️' },
+  { n: 50, name: 'Leggenda del parcheggio', icon: '🏆' },
+];
+
+function MyMap({ parks }: { parks: number | null }) {
+  const c = usePalette();
+  const n = parks ?? 0;
+  const got = BADGES.filter((b) => n >= b.n);
+  const next = BADGES.find((b) => n < b.n);
+  const prev = got.length ? got[got.length - 1].n : 0;
   return (
     <Card style={{ marginTop: space.md }}>
       <Label size={13} dim bold>
-        TROVA PARCHEGGIO SENZA GIRARE A VUOTO
+        LA TUA PARTE DELLA MAPPA
       </Label>
-      <Text style={{ color: c.text, fontSize: 20, fontWeight: '800', marginTop: 4 }}>
-        Si attiva il {date}
-        {days > 0 ? ` · tra ${days} giorn${days === 1 ? 'o' : 'i'}` : ''}
-      </Text>
-      <Label dim style={{ marginTop: 4 }}>
-        Fino ad allora ParkingCT impara i parcheggi della città. Più siamo nella tua zona, più posti vedrai: invita chi parcheggia vicino a te.
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
+        <Text style={{ color: RED, fontSize: 34, fontWeight: '800' }}>{parks === null ? '–' : n}</Text>
+        <Text style={{ color: c.text, fontSize: 16, fontWeight: '700', marginLeft: 8 }}>parcheggi ricordati</Text>
+      </View>
+      <Label dim style={{ marginTop: 2 }}>
+        Ogni tuo parcheggio insegna a ParkingCT dove sono i posti veri di Catania. Al lancio sarai tra quelli che l'hanno costruita.
       </Label>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+        {BADGES.map((b) => {
+          const on = n >= b.n;
+          return (
+            <View key={b.n} style={{ flex: 1, alignItems: 'center', opacity: on ? 1 : 0.35 }}>
+              <Text style={{ fontSize: 26 }}>{on ? b.icon : '🔒'}</Text>
+              <Text style={{ color: c.text, fontSize: 11, textAlign: 'center', marginTop: 2 }} numberOfLines={2}>
+                {b.name}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      {next ? (
+        <>
+          <View style={{ height: 8, backgroundColor: c.cardAlt, borderRadius: 4, marginTop: space.md, overflow: 'hidden' }}>
+            <View style={{ width: `${Math.min(100, ((n - prev) / (next.n - prev)) * 100)}%`, height: 8, backgroundColor: RED }} />
+          </View>
+          <Label dim size={13} style={{ marginTop: 4 }}>
+            Ancora {next.n - n} parcheggi per «{next.name}»
+          </Label>
+        </>
+      ) : null}
+    </Card>
+  );
+}
+
+function ComingSoon() {
+  const c = usePalette();
+  const items = [
+    { icon: '⏱️', title: 'Posti che si liberano tra pochi minuti', text: 'Sai in anticipo che un posto vicino a te sta per liberarsi.' },
+    { icon: '🔊', title: 'Avviso a voce mentre guidi', text: 'Niente telefono in mano: te lo dice ParkingCT.' },
+    { icon: '🤝', title: 'Quando parti, aiuti chi cerca', text: 'Il tuo posto passa in automatico a chi è lì vicino.' },
+  ];
+  return (
+    <Card style={{ marginTop: space.md }}>
+      <Label size={13} dim bold>
+        SI SBLOCCA AL LANCIO
+      </Label>
+      {items.map((i) => (
+        <View key={i.title} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: space.md }}>
+          <Text style={{ fontSize: 24, marginRight: space.md }}>{i.icon}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: c.text, fontSize: 16, fontWeight: '700' }}>{i.title}</Text>
+            <Label dim size={14}>
+              {i.text}
+            </Label>
+          </View>
+          <Text style={{ fontSize: 16 }}>🔒</Text>
+        </View>
+      ))}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: space.md, padding: space.md, borderRadius: 14, backgroundColor: c.cardAlt }}>
+        <Text style={{ fontSize: 28, marginRight: space.md }}>🎁</Text>
+        <Label size={14} style={{ flex: 1 }}>
+          <Label bold size={14}>
+            E una sorpresa
+          </Label>{' '}
+          per chi c'è già prima del lancio. Tieni ParkingCT sul telefono.
+        </Label>
+      </View>
     </Card>
   );
 }
