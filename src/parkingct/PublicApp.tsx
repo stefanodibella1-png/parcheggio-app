@@ -631,7 +631,7 @@ function FlipGroup({ value, label }: { value: number; label: string }) {
           <FlipDigit key={`${s.length}-${i}`} value={d} />
         ))}
       </View>
-      <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 8, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }}>{label}</Text>
+      <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 8, backgroundColor: 'rgba(8,14,32,0.55)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' }}>{label}</Text>
     </View>
   );
 }
@@ -659,7 +659,7 @@ function Sky({ cycle, width }: { cycle: Animated.Value; width: number }) {
   const night = cycle.interpolate({ inputRange: [0, 0.46, 0.56, 0.86, 0.96, 1], outputRange: [0, 0, 1, 1, 0, 0] });
   const arc = (from: number, to: number) => ({
     x: cycle.interpolate({ inputRange: [0, from, to, 1], outputRange: [-40, -40, width, width], extrapolate: 'clamp' }),
-    y: cycle.interpolate({ inputRange: [0, from, (from + to) / 2, to, 1], outputRange: [120, 120, 14, 120, 120], extrapolate: 'clamp' }),
+    y: cycle.interpolate({ inputRange: [0, from, (from + to) / 2, to, 1], outputRange: [300, 300, 215, 300, 300], extrapolate: 'clamp' }),
   });
   const sun = arc(0, 0.48);
   const moon = arc(0.5, 0.98);
@@ -819,7 +819,8 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
   const h = Math.floor((left % 86_400_000) / 3_600_000);
   const m = Math.floor((left % 3_600_000) / 60_000);
   const sec = Math.floor((left % 60_000) / 1000);
-  const date = new Date(cfg.launchAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+  const ld = new Date(cfg.launchAt);
+  const date = `${ld.getDate()}${ld.getDate() === 1 ? '°' : ''} ${ld.toLocaleDateString('it-IT', { month: 'long' })}`;
   const shadow = { textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 };
   return (
     <View
@@ -827,18 +828,16 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
       style={{ marginTop: space.md, borderRadius: 24, padding: space.lg, overflow: 'hidden', backgroundColor: '#1B2747' }}
     >
       <Sky cycle={cycle} width={w} />
-      <View style={{ alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', ...shadow }}>Il {date} </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginHorizontal: 2 }}>
-            <Text style={{ fontSize: 14 }}>🚗</Text>
-            <Text style={{ color: '#16181D', fontSize: 16, fontWeight: '800', marginLeft: 4 }}>
-              Parking<Text style={{ color: RED }}>CT</Text>
-            </Text>
-          </View>
-          <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', ...shadow }}> si sveglia</Text>
+      {/* velo scuro dietro le scritte: leggibili anche quando passano sole e luna */}
+      <View style={{ alignItems: 'center', backgroundColor: 'rgba(8,14,32,0.42)', borderRadius: 18, paddingVertical: space.md, paddingHorizontal: space.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', ...shadow }}>Il {date} </Text>
+          <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800', ...shadow }}>
+            Parking<Text style={{ color: '#FF4B47' }}>CT</Text>
+          </Text>
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', ...shadow }}> si sveglia</Text>
         </View>
-        <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: '800', marginTop: 12, lineHeight: 34, textAlign: 'center', ...shadow }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: '800', marginTop: 10, lineHeight: 34, textAlign: 'center', ...shadow }}>
           Basta girare a vuoto.
         </Text>
         <Text style={{ color: '#FFFFFF', fontSize: 15, marginTop: 6, lineHeight: 21, textAlign: 'center', ...shadow }}>
