@@ -675,9 +675,7 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
       {/* luna */}
       <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 30, height: 30, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
         <View style={{ position: 'absolute', left: -8, top: -8, width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F1DE', opacity: 0.12 }} />
-        <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F4F1DE' }} />
-        <View style={{ position: 'absolute', left: 7, top: 8, width: 6, height: 6, borderRadius: 3, backgroundColor: '#DCD6BC' }} />
-        <View style={{ position: 'absolute', left: 17, top: 16, width: 5, height: 5, borderRadius: 3, backgroundColor: '#DCD6BC' }} />
+        <Text style={{ fontSize: 30, lineHeight: 34, includeFontPadding: false, transform: [{ rotate: '-20deg' }] }}>🌙</Text>
       </Animated.View>
       {/* palazzi: pieni, coprono sole e luna quando sorgono e tramontano */}
       <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 110, height: 110, flexDirection: 'row', alignItems: 'flex-end', zIndex: 5, elevation: 1 }}>
@@ -688,9 +686,13 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
               flex: 1,
               height: h,
               marginHorizontal: 1,
-              backgroundColor: i % 2 ? '#1E2B4D' : '#243358',
+              backgroundColor: i % 2 ? '#0B1226' : '#0F1830',
               borderTopLeftRadius: 2,
               borderTopRightRadius: 2,
+              borderTopWidth: 2,
+              borderLeftWidth: 1,
+              borderRightWidth: 1,
+              borderColor: '#4A5E92',
             }}
           >
             <Animated.View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 4, gap: 4, opacity: night }}>
@@ -852,7 +854,8 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
         </Piece>
         <Piece delay={2300}>
           <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: space.md, lineHeight: 21, textAlign: 'center' }}>
-            Ti avviserà dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada.
+            Cerchi parcheggio? ParkingCT ti avvisa dove, vicino a te, un posto si libererà tra pochi minuti. Lo sa in anticipo perché chi torna alla propria
+            auto lo segnala in automatico, senza toccare il telefono.
           </Text>
         </Piece>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
