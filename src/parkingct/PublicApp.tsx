@@ -47,7 +47,11 @@ import {
   TIER_BADGE,
   fetchWall,
   myWallEntry,
+  verifyFounder,
   wallShows,
+  WALL_MAX_NAMES,
+  MAX_CODE_MOVES,
+  type MyWall,
   saveWallEntry,
   type Ad,
   type FounderInfo,
@@ -76,6 +80,10 @@ export function PublicApp() {
   const refreshCfg = useCallback(async () => {
     const conf = await getConfig();
     setCfg(conf);
+    if ((await verifyFounder()) === 'moved') {
+      setFounder(null);
+      Alert.alert('Codice attivo su un altro telefono', 'Il tuo codice ParkingCT è stato inserito su un altro telefono. Per usarlo di nuovo qui, inseriscilo nella pagina Fondatori.');
+    }
     const launched = Date.now() >= conf.launchAt;
     host.setCommunityAllowed(launched);
     if (launched && (await kvGet('pc:launchParty').catch(() => null)) !== '1') {
@@ -1200,6 +1208,29 @@ function FounderScreen({
             </Label>
             {founder.tier !== 'amici' ? <Label dim style={{ marginTop: 4 }}>Codice: {founder.code}</Label> : null}
           </Card>
+          {founder.tier !== 'amici' ? (
+            <Card style={{ marginTop: space.md }}>
+              <Label bold>🔑 Conserva il tuo codice</Label>
+              <Text selectable style={{ color: c.text, fontSize: 22, fontWeight: '800', letterSpacing: 1, marginTop: 4 }}>
+                {founder.code}
+              </Text>
+              <Label dim size={14} style={{ marginTop: 4 }}>
+                Se cambi telefono o reinstalli l'app, inserisci di nuovo questo codice: ParkingCT torna attivo gratis, con il tuo livello e il tuo
+                nome nel muro. Vale per un telefono alla volta.
+              </Label>
+              <Button
+                small
+                variant="ghost"
+                title="Salvalo (WhatsApp, note, email…)"
+                style={{ marginTop: space.md }}
+                onPress={() =>
+                  Share.share({
+                    message: `Il mio codice ParkingCT (${TIER_LABEL[founder.tier]}): ${founder.code}\nConservalo: serve per riattivare l'app gratis se cambi telefono o la reinstalli.`,
+                  })
+                }
+              />
+            </Card>
+          ) : null}
           <WallChoice founder={founder} />
           {founder.gifts.length ? (
             <Card style={{ marginTop: space.md }}>
@@ -1286,7 +1317,8 @@ function FounderScreen({
       <Card style={{ marginTop: space.lg }}>
         <Label bold>{founder ? 'Hai un altro codice?' : 'Hai già il codice?'}</Label>
         <Label dim size={14} style={{ marginTop: 4 }}>
-          Il codice è come ABCD-EFGH-JKLM: arriva dopo il contributo o in regalo da un amico.
+          Il codice è come ABCD-EFGH-JKLM: arriva dopo il contributo o in regalo da un amico. Hai cambiato telefono o reinstallato l'app? Inserisci
+          qui lo stesso codice.
         </Label>
         <TextInput
           value={code}
@@ -1323,13 +1355,16 @@ function FounderScreen({
             setBusy(true);
             const r = await redeemCode(code);
             setBusy(false);
-            if (r === 'ok') onRedeemed();
-            else
+            if (r === 'ok' || r === 'moved') {
+              if (r === 'moved')
+                Alert.alert('Codice spostato su questo telefono', 'Bentornato! Sul telefono precedente ParkingCT non risulta più attivo con questo codice.');
+              onRedeemed();
+            } else
               setMsg(
                 r === 'invalid'
                   ? 'Codice non valido: controlla le lettere.'
-                  : r === 'used'
-                    ? 'Questo codice è già stato usato su un altro telefono.'
+                  : r === 'limit'
+                    ? `Questo codice è già stato spostato ${MAX_CODE_MOVES} volte: scrivici per riattivarlo.`
                     : 'Connessione assente: riprova tra poco.',
               );
           }}
@@ -1354,11 +1389,11 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
   const c = usePalette();
   const [visible, setVisible] = useState(true);
   const [name, setName] = useState('');
-  const [saved, setSaved] = useState<{ name: string; visible: boolean } | null>(null);
+  const [saved, setSaved] = useState<MyWall | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => {
-    void myWallEntry().then((w) => {
+    void myWallEntry(founder).then((w) => {
       setSaved(w);
       if (w) {
         setVisible(w.visible);
@@ -1398,6 +1433,7 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
       {visible ? (
         <TextInput
           value={name}
+          editable={(saved?.edits ?? 0) < WALL_MAX_NAMES || !saved?.name}
           onChangeText={(t) => (setName(t), setMsg(null))}
           maxLength={24}
           placeholder="Come vuoi comparire? es. Mario R."
@@ -1406,8 +1442,15 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
         />
       ) : null}
       <Label dim size={13} style={{ marginTop: space.sm }}>
-        🔒 Pubblichiamo solo il nome che scrivi tu (puoi usare un soprannome o le iniziali). Puoi cambiarlo o toglierlo quando vuoi. Niente
-        parolacce, link o numeri: i nomi sono controllati.
+        🔒 Pubblichiamo solo il nome che scrivi tu (puoi usare un soprannome o le iniziali). Puoi toglierlo quando vuoi. Niente parolacce, link o
+        numeri: i nomi sono controllati.
+      </Label>
+      <Label size={13} bold style={{ marginTop: 4 }} color={(saved?.edits ?? 0) >= WALL_MAX_NAMES ? RED : undefined}>
+        {!saved || (saved.edits ?? 0) === 0
+          ? '✍️ Controlla bene: dopo, il nome si può correggere una sola volta.'
+          : (saved.edits ?? 0) < WALL_MAX_NAMES
+            ? '✍️ Ti resta una sola correzione del nome.'
+            : '✍️ Hai già usato la correzione: il nome non si può più cambiare (puoi sempre tornare anonimo).'}
       </Label>
       {msg ? (
         <Label size={14} color={RED} style={{ marginTop: space.sm }}>
@@ -1430,6 +1473,10 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
             setMsg('Questo nome non è ammesso: niente parolacce, link o numeri di telefono.');
             return;
           }
+          if (r === 'limit') {
+            setMsg('Hai già corretto il nome una volta: non si può più cambiare. Puoi solo restare anonimo.');
+            return;
+          }
           if (r === 'locked') {
             setMsg('Il tuo nome è stato nascosto dalla moderazione: non si può più modificare.');
             return;
@@ -1438,7 +1485,7 @@ function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () =
             setMsg('Connessione assente: riprova tra poco.');
             return;
           }
-          setSaved({ name: name.trim(), visible: visible && !!name.trim() });
+          setSaved(await myWallEntry(founder));
           setMsg(
             !visible
               ? 'Fatto: resti anonimo, ma conti tra i fondatori.'

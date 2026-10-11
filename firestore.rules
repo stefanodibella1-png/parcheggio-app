@@ -94,10 +94,18 @@ service cloud.firestore {
       allow list, delete: if false;
       allow create: if adminBatch();
       allow update: if adminBatch() || (
+        // prima attivazione
         resource.data.usedBy == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
         && request.resource.data.usedBy is string
-        && request.resource.data.usedAt is number);
+        && request.resource.data.usedAt is number) || (
+        // stesso codice su un nuovo telefono / app reinstallata: al massimo 5 spostamenti
+        resource.data.usedBy != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt', 'moves'])
+        && request.resource.data.usedBy is string
+        && request.resource.data.usedAt is number
+        && request.resource.data.moves == resource.data.get('moves', 0) + 1
+        && request.resource.data.moves <= 5);
     }
 
     // ParkingCT: pubblicità (scritte dal control center, lette dall'app)
@@ -135,7 +143,8 @@ service cloud.firestore {
     // ha invitato abbastanza amici). Solo chi ha usato quel codice può scrivere; il livello è quello
     // del codice, non lo sceglie l'app. Il nome compare solo se l'utente lo vuole (visible).
     function wallUserOk(id) {
-      return request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by', 'mod', 'modName'])
+      return request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by', 'mod', 'modName', 'edits'])
+        && request.resource.data.get('edits', 0) is int
         && request.resource.data.name is string && request.resource.data.name.size() <= 24
         && request.resource.data.visible is bool
         && request.resource.data.t is number
@@ -156,13 +165,23 @@ service cloud.firestore {
     match /wall/{id} {
       allow read: if true;
       allow delete: if false;
+      // nome: si scrive una volta e si corregge una sola volta (edits = nomi scritti, massimo 2);
+      // tornare anonimi (nome vuoto) è sempre permesso
       allow create: if wallUserOk(id)
-        && request.resource.data.get('mod', '') == '' && request.resource.data.get('modName', '') == '';
+        && request.resource.data.get('mod', '') == '' && request.resource.data.get('modName', '') == ''
+        && request.resource.data.get('edits', 0) == (request.resource.data.name == '' ? 0 : 1);
       allow update: if adminBatch() || (
         wallUserOk(id)
         && resource.data.get('mod', '') != 'hidden'
         && request.resource.data.get('mod', '') == resource.data.get('mod', '')
-        && request.resource.data.get('modName', '') == resource.data.get('modName', ''));
+        && request.resource.data.get('modName', '') == resource.data.get('modName', '')
+        && (
+          (request.resource.data.name == '' || request.resource.data.name == resource.data.name)
+            && request.resource.data.get('edits', 0) == resource.data.get('edits', 0)
+          ||
+          request.resource.data.get('edits', 0) == resource.data.get('edits', 0) + 1
+            && request.resource.data.get('edits', 0) <= 2
+        ));
     }
 
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)

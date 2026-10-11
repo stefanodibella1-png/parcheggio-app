@@ -158,7 +158,10 @@ export interface FounderInfo {
   gifts: string[];
 }
 
-export type RedeemResult = 'ok' | 'invalid' | 'used' | 'offline';
+export type RedeemResult = 'ok' | 'moved' | 'invalid' | 'limit' | 'offline';
+
+/** quante volte un codice può essere spostato su un altro telefono (cambio telefono, reinstallazione) */
+export const MAX_CODE_MOVES = 5;
 
 export function prettyCode(code: string): string {
   const c = normalizeCode(code);
@@ -179,18 +182,53 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
   const doc = (await get.json()) as { fields: Record<string, FsVal> };
   const id = await deviceId();
   const usedBy = str(doc.fields.usedBy);
-  if (usedBy && usedBy !== id) return 'used';
+  let result: RedeemResult = 'ok';
   if (!usedBy) {
     const up = await call(`${b}/codes/${h}?updateMask.fieldPaths=usedBy&updateMask.fieldPaths=usedAt&${key()}`, {
       method: 'PATCH',
       body: JSON.stringify({ fields: { usedBy: { stringValue: id }, usedAt: { doubleValue: Date.now() } } }),
     });
     if (!up) return 'offline';
-    if (!up.ok) return 'used';
+    if (!up.ok) return 'invalid';
+  } else if (usedBy !== id) {
+    // stesso codice su un nuovo telefono (o app reinstallata): il codice si sposta qui
+    const moves = num(doc.fields.moves) ?? 0;
+    if (moves >= MAX_CODE_MOVES) return 'limit';
+    const mask = ['usedBy', 'usedAt', 'moves'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
+    const up = await call(`${b}/codes/${h}?${mask}&${key()}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields: { usedBy: { stringValue: id }, usedAt: { doubleValue: Date.now() }, moves: { integerValue: String(moves + 1) } } }),
+    });
+    if (!up) return 'offline';
+    if (!up.ok) return 'limit';
+    result = 'moved';
   }
   const tier = (str(doc.fields.tier) as Tier | null) ?? 'base';
   const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode) };
   await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
+  await kvSet('pc:founderCheckT', String(Date.now())).catch(() => {});
+  return result;
+}
+
+/**
+ * Il codice è ancora attivo su questo telefono? (una volta al giorno)
+ * Se è stato attivato su un altro telefono, qui torna non attivo: un codice vale per un telefono alla volta.
+ */
+export async function verifyFounder(): Promise<'ok' | 'moved' | 'unknown'> {
+  const f = await founderInfo();
+  const b = base();
+  if (!f || f.tier === 'amici' || !b) return 'unknown';
+  const last = Number((await kvGet('pc:founderCheckT').catch(() => null)) ?? 0);
+  if (Date.now() - last < 24 * 3600_000) return 'unknown';
+  const r = await call(`${b}/codes/${sha256Hex(normalizeCode(f.code))}?${key()}`);
+  if (!r?.ok) return 'unknown';
+  await kvSet('pc:founderCheckT', String(Date.now())).catch(() => {});
+  const usedBy = str(((await r.json()) as { fields: Record<string, FsVal> }).fields.usedBy);
+  if (usedBy && usedBy !== (await deviceId())) {
+    await kvSet('pc:founder', '').catch(() => {});
+    await kvSet('pc:wall', '').catch(() => {});
+    return 'moved';
+  }
   return 'ok';
 }
 
@@ -198,6 +236,7 @@ export async function founderInfo(): Promise<FounderInfo | null> {
   const s = await kvGet('pc:founder').catch(() => null);
   if (!s) return null;
   const f = JSON.parse(s) as Partial<FounderInfo>;
+  if (!f.code && f.tier !== 'amici') return null;
   return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [] };
 }
 
@@ -446,39 +485,77 @@ export async function fetchWall(): Promise<WallEntry[] | null> {
   return out.sort((a, b2) => TIER_RANK[a.tier] - TIER_RANK[b2.tier] || a.t - b2.t);
 }
 
-export async function myWallEntry(): Promise<{ name: string; visible: boolean } | null> {
-  const s = await kvGet('pc:wall').catch(() => null);
-  return s ? (JSON.parse(s) as { name: string; visible: boolean }) : null;
+/** quante volte si può scrivere un nome nel muro: il primo + una correzione */
+export const WALL_MAX_NAMES = 2;
+
+export interface MyWall {
+  name: string;
+  visible: boolean;
+  /** nomi scritti finora (0, 1 o 2) */
+  edits: number;
+  hidden: boolean;
+  t: number;
 }
 
-export type WallSave = 'ok' | 'review' | 'blocked' | 'locked' | 'offline';
+/** La mia voce nel muro, letta dal server (serve anche dopo un cambio telefono o una reinstallazione). */
+export async function myWallEntry(f?: FounderInfo | null): Promise<MyWall | null> {
+  const fi = f ?? (await founderInfo());
+  const b = base();
+  if (fi && b) {
+    const r = await call(`${b}/wall/${await wallId(fi)}?${key()}`);
+    if (r?.status === 404) return null;
+    if (r?.ok) {
+      const d = ((await r.json()) as { fields: Record<string, FsVal> }).fields;
+      const w: MyWall = {
+        name: str(d.name) ?? '',
+        visible: d.visible?.booleanValue ?? false,
+        edits: num(d.edits) ?? (str(d.name) ? 1 : 0),
+        hidden: str(d.mod) === 'hidden',
+        t: num(d.t) ?? Date.now(),
+      };
+      await kvSet('pc:wall', JSON.stringify(w)).catch(() => {});
+      return w;
+    }
+  }
+  const s = await kvGet('pc:wall').catch(() => null);
+  return s ? (JSON.parse(s) as MyWall) : null;
+}
 
-/** Salva la scelta per il muro: nome visibile oppure anonimo. */
+export type WallSave = 'ok' | 'review' | 'blocked' | 'locked' | 'limit' | 'offline';
+
+/**
+ * Salva la scelta per il muro. Il nome si scrive una volta e si può correggere una sola volta
+ * (lo garantisce il server); passare ad anonimo è sempre possibile.
+ */
 export async function saveWallEntry(f: FounderInfo, name: string, visible: boolean): Promise<WallSave> {
   const b = base();
   if (!b) return 'offline';
-  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 24);
-  const check = visible ? checkName(clean) : 'ok';
+  const clean = visible ? name.replace(/\s+/g, ' ').trim().slice(0, 24) : '';
+  const check = clean ? checkName(clean) : 'ok';
   if (check === 'blocked') return 'blocked';
   const id = await wallId(f);
-  const prev = await myWallEntry();
-  const mask = ['name', 'visible', 'tier', 't', 'by'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
+  const prev = await myWallEntry(f);
+  if (prev?.hidden) return 'locked';
+  const newName = clean.length > 0 && clean !== (prev?.name ?? '');
+  const edits = (prev?.edits ?? 0) + (newName ? 1 : 0);
+  if (newName && edits > WALL_MAX_NAMES) return 'limit';
+  const mask = ['name', 'visible', 'tier', 't', 'by', 'edits'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
   const r = await call(`${b}/wall/${id}?${mask}&${key()}`, {
     method: 'PATCH',
     body: JSON.stringify({
       fields: {
-        name: { stringValue: visible ? clean : '' },
-        visible: { booleanValue: visible && clean.length > 0 },
+        name: { stringValue: clean },
+        visible: { booleanValue: clean.length > 0 },
         tier: { stringValue: f.tier },
-        t: { doubleValue: prev ? Number((await kvGet('pc:wallT').catch(() => null)) ?? Date.now()) : Date.now() },
+        t: { doubleValue: prev?.t ?? Date.now() },
         by: { stringValue: await deviceId() },
+        edits: { integerValue: String(edits) },
       },
     }),
   });
   if (!r) return 'offline';
-  if (r.status === 403) return 'locked';
+  if (r.status === 403) return newName ? 'limit' : 'locked';
   if (!r.ok) return 'offline';
-  if (!prev) await kvSet('pc:wallT', String(Date.now())).catch(() => {});
-  await kvSet('pc:wall', JSON.stringify({ name: clean, visible: visible && clean.length > 0 })).catch(() => {});
+  await kvSet('pc:wall', JSON.stringify({ name: clean, visible: clean.length > 0, edits, hidden: false, t: prev?.t ?? Date.now() })).catch(() => {});
   return check === 'review' ? 'review' : 'ok';
 }

@@ -9,6 +9,8 @@ on:
     paths:
       - 'tools/ci/stats.mjs'
       - 'tools/ci/admin-smoke.mjs'
+      - 'tools/ci/founder-smoke.mjs'
+      - 'firestore.rules'
       - '.github/workflows/stats.yml'
   workflow_dispatch:
 
@@ -43,3 +45,9 @@ jobs:
         run: |
           cp tools/ci/admin-smoke.mjs "$RUNNER_TEMP/fb/admin-smoke.mjs"
           CFG_FILE="$PWD/src/community/firebaseConfig.ts" && cd "$RUNNER_TEMP/fb" && CFG_FILE="$CFG_FILE" node admin-smoke.mjs
+      - name: Prova codici spostati e nomi del muro
+        if: github.event_name != 'schedule'
+        run: |
+          sleep 60  # le regole nuove vengono pubblicate dall'altro workflow
+          cp tools/ci/founder-smoke.mjs "$RUNNER_TEMP/fb/founder-smoke.mjs"
+          CFG_FILE="$PWD/src/community/firebaseConfig.ts" && cd "$RUNNER_TEMP/fb" && CFG_FILE="$CFG_FILE" node founder-smoke.mjs
