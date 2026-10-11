@@ -29,5 +29,8 @@ const cj = cnt.ok ? await cnt.json() : null;
 const n = cj?.[0]?.result?.aggregateFields?.n?.integerValue;
 if (!n) { console.log(`::error title=ParkingCT conteggio::HTTP ${cnt.status} ${JSON.stringify(cj).slice(0, 300)}`); process.exit(1); }
 const codeBad = await fetch(`${base}/codes/${'0'.repeat(64)}?key=${apiKey}`);
+const firstHash = readFileSync('tools/ci/founder-codes.sha256', 'utf8').split('\n').find((x) => /^[0-9a-f]{64}$/.test(x.trim()));
+const codeOk = await fetch(`${base}/codes/${firstHash}?key=${apiKey}`);
+console.log(`::notice title=Codice reale::lettura → ${codeOk.status} ${(await codeOk.text()).slice(0, 200).replace(/\n/g, ' ')}`);
 const listCodes = await fetch(`${base}/codes?key=${apiKey}`);
 console.log(`::notice title=ParkingCT prova::config OK, registrazione zona OK, conteggio ${n}, codice inesistente → ${codeBad.status}, elenco codici → ${listCodes.status} (deve essere 403)`);
