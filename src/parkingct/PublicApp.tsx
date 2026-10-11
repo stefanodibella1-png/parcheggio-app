@@ -124,7 +124,14 @@ export function PublicApp() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar style={c.isDark ? 'light' : 'dark'} />
       {body}
-      <Celebration kind={party} founder={!!founder} onClose={() => setParty(null)} />
+      <Celebration
+        kind={party}
+        founder={!!founder}
+        onClose={(next) => {
+          setParty(null);
+          if (next === 'code') setScreen('founder');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -134,7 +141,7 @@ export function PublicApp() {
 
 const INTRO = [
   { icon: '🚗', title: 'Ricordo io dove hai parcheggiato', text: 'Quando parcheggi, ParkingCT salva da solo la via e il punto esatto. Non devi toccare niente.' },
-  { icon: '🅿️', title: 'Posti che si liberano, prima degli altri', text: "Quando qualcuno torna alla sua auto vicino a te, ricevi l'avviso qualche minuto prima che il posto si liberi." },
+  { icon: '🅿️', title: 'Basta girare a vuoto', text: "Quando cerchi parcheggio, ParkingCT ti avvisa da solo dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada." },
   { icon: '🔒', title: 'La tua posizione resta tua', text: 'Non mostriamo mai a nessuno dove sei. Condividiamo solo i posti che si liberano, in forma anonima.' },
 ];
 
@@ -330,10 +337,9 @@ function Home({ cfg, founder, go }: { cfg: PublicConfig | null; founder: { code:
       {/* sostenitore */}
       {!founder ? (
         <Card style={{ marginTop: space.md }}>
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Diventa sostenitore fondatore</Text>
+          <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
-            Con pochi euro aiuti ParkingCT a nascere a Catania. In cambio: titolo di fondatore per sempre, nome nel muro dei fondatori e
-            l'adesivo per l'auto.
+            Sostieni ParkingCT con pochi euro: ricevi un codice personale e, al lancio, l'app si attiva per te gratis per sempre.
           </Label>
           <Button title="Scopri di più" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
         </Card>
@@ -385,7 +391,7 @@ function LaunchCard({ cfg, now, count }: { cfg: PublicConfig; now: number; count
   return (
     <Card style={{ marginTop: space.md }}>
       <Label size={13} dim bold>
-        POSTI CHE SI LIBERANO
+        TROVA PARCHEGGIO SENZA GIRARE A VUOTO
       </Label>
       <Text style={{ color: c.text, fontSize: 20, fontWeight: '800', marginTop: 4 }}>
         Si attiva il {date}
@@ -446,15 +452,17 @@ function FounderScreen({
       <Text style={{ fontSize: 56, textAlign: 'center', marginTop: space.md }}>⭐</Text>
       <Text style={{ color: c.text, fontSize: 26, fontWeight: '800', textAlign: 'center' }}>Sostenitore fondatore</Text>
       <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm }}>
-        ParkingCT nasce a Catania, da un catanese. Se ti piace l'idea, aiutala a partire con un piccolo contributo.
+        ParkingCT nasce a Catania, da un catanese. Con un piccolo contributo l'aiuti a partire e la usi gratis per sempre.
       </Label>
       <Card style={{ marginTop: space.lg }}>
         <Label bold>Cosa ricevi</Label>
-        <Label style={{ marginTop: 6 }}>⭐ Il titolo di fondatore, per sempre, nell'app</Label>
+        <Label style={{ marginTop: 6 }}>🎁 ParkingCT gratis per sempre</Label>
+        <Label style={{ marginTop: 4 }}>⭐ Il titolo di fondatore nell'app</Label>
         <Label style={{ marginTop: 4 }}>🧱 Il tuo nome nel muro dei fondatori</Label>
         <Label style={{ marginTop: 4 }}>🚗 L'adesivo ParkingCT per l'auto</Label>
         <Label dim size={13} style={{ marginTop: 8 }}>
-          ParkingCT resta gratuita: il contributo è un sostegno facoltativo.
+          Dopo il contributo ricevi il tuo codice personale. Al lancio ParkingCT te lo chiede: lo inserisci una volta e l'app resta attiva
+          per sempre. Puoi inserirlo anche subito qui sotto.
         </Label>
       </Card>
       {founder ? (
@@ -574,7 +582,7 @@ function InfoScreen({ onBack }: { onBack: () => void }) {
 
 const CONFETTI = ['🎉', '🎊', '✨', '🚗', '🅿️', '⭐', '🎈'];
 
-function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'founder'; founder: boolean; onClose: () => void }) {
+function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'founder'; founder: boolean; onClose: (next?: 'code') => void }) {
   const c = usePalette();
   const { width, height } = Dimensions.get('window');
   const pieces = useRef(
@@ -606,9 +614,9 @@ function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'foun
   const text =
     kind === 'launch'
       ? `Da oggi ricevi gli avvisi dei posti che si liberano vicino a te.${founder ? ' Grazie per averci sostenuto fin dall\'inizio!' : ''}`
-      : 'Grazie per il tuo contributo: ParkingCT nasce anche grazie a te. Il titolo di fondatore è tuo per sempre.';
+      : 'Grazie per il tuo contributo: ParkingCT nasce anche grazie a te. Per te è attiva gratis, per sempre.';
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+    <Modal transparent animationType="fade" visible onRequestClose={() => onClose()}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: space.xl }}>
         {pieces.map((p, i) => (
           <Animated.Text key={i} style={{ position: 'absolute', left: p.x, top: 0, fontSize: 28, transform: [{ translateY: p.y }] }}>
@@ -621,7 +629,17 @@ function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'foun
           <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm }}>
             {text}
           </Label>
-          <Button title="Fantastico!" style={{ marginTop: space.lg, alignSelf: 'stretch', backgroundColor: RED }} onPress={onClose} />
+          {kind === 'launch' && !founder ? (
+            <>
+              <Label size={15} style={{ textAlign: 'center', marginTop: space.md }}>
+                Hai sostenuto ParkingCT? Inserisci ora il tuo codice: per te resta gratis per sempre.
+              </Label>
+              <Button title="Inserisci il codice" style={{ marginTop: space.md, alignSelf: 'stretch', backgroundColor: RED }} onPress={() => onClose('code')} />
+              <Button title="Più tardi" variant="ghost" style={{ marginTop: space.sm, alignSelf: 'stretch' }} onPress={() => onClose()} />
+            </>
+          ) : (
+            <Button title="Fantastico!" style={{ marginTop: space.lg, alignSelf: 'stretch', backgroundColor: RED }} onPress={() => onClose()} />
+          )}
         </Animated.View>
       </View>
     </Modal>
