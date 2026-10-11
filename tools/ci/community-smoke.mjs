@@ -25,9 +25,9 @@ if (!cfg.ok) { console.log(`::error title=ParkingCT config::HTTP ${cfg.status}`)
 const dv = await fetch(`${base}/devices/ci-test?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { zone: { stringValue: 'zzzzz' }, t: { doubleValue: now }, founder: { booleanValue: false } } }) });
 if (!dv.ok) { console.log(`::error title=ParkingCT device::HTTP ${dv.status} ${(await dv.text()).slice(0, 300).replace(/\n/g, ' ')}`); process.exit(1); }
 const cnt = await fetch(`${base}:runAggregationQuery?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ structuredAggregationQuery: { structuredQuery: { from: [{ collectionId: 'devices' }], where: { fieldFilter: { field: { fieldPath: 'zone' }, op: 'EQUAL', value: { stringValue: 'zzzzz' } } } }, aggregations: [{ alias: 'n', count: {} }] } }) });
-const cj = cnt.ok ? await cnt.json() : null;
-const n = cj?.[0]?.result?.aggregateFields?.n?.integerValue;
-if (!n) { console.log(`::error title=ParkingCT conteggio::HTTP ${cnt.status} ${JSON.stringify(cj).slice(0, 300)}`); process.exit(1); }
+// il conteggio ora è riservato al control center: dall'app pubblica deve essere rifiutato
+const n = cnt.ok ? 'VISIBILE (regole da rivedere)' : 'nascosto OK';
+if (cnt.ok) { console.log(`::error title=ParkingCT conteggio::il numero di installazioni è leggibile da chiunque`); process.exit(1); }
 const codeBad = await fetch(`${base}/codes/${'0'.repeat(64)}?key=${apiKey}`);
 const firstHash = readFileSync('tools/ci/founder-codes.sha256', 'utf8').split('\n').find((x) => /^[0-9a-f]{64}$/.test(x.trim()));
 const codeOk = await fetch(`${base}/codes/${firstHash}?key=${apiKey}`);
