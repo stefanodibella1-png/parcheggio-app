@@ -631,16 +631,21 @@ function FlipGroup({ value, label }: { value: number; label: string }) {
           <FlipDigit key={`${s.length}-${i}`} value={d} />
         ))}
       </View>
-      <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 8, backgroundColor: 'rgba(8,14,32,0.55)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' }}>{label}</Text>
+      <Text style={{ color: '#AEB9CC', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 8 }}>{label}</Text>
     </View>
   );
 }
 
-// --- cielo animato giorno/notte (ciclo continuo di 24 s) ---
+// --- scena animata giorno/notte (ciclo continuo di 24 s) ---
+// In alto la scena (cielo, sole/luna, palazzi, strada); sotto, su un pannello pieno, le scritte
+// e il conto alla rovescia: sole e luna non passano mai dietro al testo.
 
 const CYCLE_MS = 24_000;
-const STARS = Array.from({ length: 16 }, (_, i) => ({ x: (i * 53 + 17) % 100, y: (i * 37 + 11) % 55, s: i % 3 === 0 ? 3 : 2 }));
-const BUILDINGS = [38, 62, 48, 80, 54, 70, 44, 90, 58, 66, 46, 76, 52, 40];
+const SCENE_H = 230;
+const ROAD_H = 46;
+const HORIZON = SCENE_H - ROAD_H; // base dei palazzi
+const STARS = Array.from({ length: 22 }, (_, i) => ({ x: (i * 53 + 17) % 100, y: 6 + ((i * 37 + 11) % 48), s: i % 4 === 0 ? 3 : 2 }));
+const BUILDINGS = [46, 72, 56, 94, 62, 80, 50, 104, 66, 76, 54, 88, 60, 48];
 
 function useCycle(): Animated.Value {
   const v = useRef(new Animated.Value(0)).current;
@@ -653,68 +658,76 @@ function useCycle(): Animated.Value {
 }
 
 /** 0–0.42 giorno · 0.42–0.52 tramonto · 0.52–0.9 notte · 0.9–1 alba */
-function Sky({ cycle, width }: { cycle: Animated.Value; width: number }) {
+function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
   const day = cycle.interpolate({ inputRange: [0, 0.42, 0.52, 0.9, 1], outputRange: [1, 1, 0, 0, 1] });
-  const dusk = cycle.interpolate({ inputRange: [0, 0.38, 0.46, 0.54, 0.88, 0.95, 1], outputRange: [0, 0, 0.6, 0, 0, 0.5, 0] });
+  const dusk = cycle.interpolate({ inputRange: [0, 0.38, 0.46, 0.54, 0.88, 0.95, 1], outputRange: [0, 0, 0.65, 0, 0, 0.55, 0] });
   const night = cycle.interpolate({ inputRange: [0, 0.46, 0.56, 0.86, 0.96, 1], outputRange: [0, 0, 1, 1, 0, 0] });
-  const arc = (from: number, to: number) => ({
-    x: cycle.interpolate({ inputRange: [0, from, to, 1], outputRange: [-40, -40, width, width], extrapolate: 'clamp' }),
-    y: cycle.interpolate({ inputRange: [0, from, (from + to) / 2, to, 1], outputRange: [300, 300, 215, 300, 300], extrapolate: 'clamp' }),
-  });
-  const sun = arc(0, 0.48);
-  const moon = arc(0.5, 0.98);
+  // arco realistico: sorge da dietro i palazzi, sale in alto nel cielo, tramonta dall'altra parte
+  const arc = (from: number, to: number, size: number) => {
+    const mid = (from + to) / 2;
+    return {
+      x: cycle.interpolate({ inputRange: [0, from, to, 1], outputRange: [-size, -size, width, width], extrapolate: 'clamp' }),
+      y: cycle.interpolate({
+        inputRange: [0, from, from + (mid - from) * 0.5, mid, to - (to - mid) * 0.5, to, 1],
+        outputRange: [HORIZON + 10, HORIZON + 10, 40, 14, 40, HORIZON + 10, HORIZON + 10],
+        extrapolate: 'clamp',
+      }),
+    };
+  };
+  const sun = arc(0, 0.48, 40);
+  const moon = arc(0.5, 0.98, 30);
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+    <View style={{ height: SCENE_H, overflow: 'hidden' }}>
       {/* notte (base) */}
-      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#1B2747' }} />
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%', backgroundColor: '#2A3B66', opacity: 0.6 }} />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#16224A' }} />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 90, height: 90, backgroundColor: '#2C3F75', opacity: 0.7 }} />
       {/* giorno */}
       <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: day }}>
-        <View style={{ flex: 1, backgroundColor: '#2E78C7' }} />
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%', backgroundColor: '#5FA2E3', opacity: 0.55 }} />
+        <View style={{ flex: 1, backgroundColor: '#3A8BDB' }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 90, height: 90, backgroundColor: '#8CC4F2', opacity: 0.6 }} />
       </Animated.View>
-      {/* tramonto e alba */}
-      <Animated.View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%', backgroundColor: '#F08A4B', opacity: dusk }} />
+      {/* tramonto / alba */}
+      <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 120, height: 120, backgroundColor: '#F4874B', opacity: dusk }} />
       {/* stelle */}
-      <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: night }}>
+      <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: HORIZON, opacity: night }}>
         {STARS.map((s, i) => (
-          <View key={i} style={{ position: 'absolute', left: `${s.x}%`, top: `${s.y}%`, width: s.s, height: s.s, borderRadius: 2, backgroundColor: '#FFFFFF', opacity: 0.85 }} />
+          <View key={i} style={{ position: 'absolute', left: `${s.x}%`, top: `${s.y}%`, width: s.s, height: s.s, borderRadius: 2, backgroundColor: '#FFFFFF', opacity: 0.9 }} />
         ))}
       </Animated.View>
       {/* sole */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          backgroundColor: '#FFD54F',
-          shadowColor: '#FFD54F',
-          shadowOpacity: 0.9,
-          shadowRadius: 16,
-          elevation: 6,
-          transform: [{ translateX: sun.x }, { translateY: sun.y }],
-        }}
-      />
-      {/* luna */}
-      <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 26, height: 26, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
-        <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#F4F1DE' }} />
-        <View style={{ position: 'absolute', left: 8, top: -3, width: 24, height: 24, borderRadius: 12, backgroundColor: '#1B2747' }} />
+      <Animated.View style={{ position: 'absolute', left: 0, top: 0, transform: [{ translateX: sun.x }, { translateY: sun.y }] }}>
+        <View style={{ position: 'absolute', left: -14, top: -14, width: 68, height: 68, borderRadius: 34, backgroundColor: '#FFE082', opacity: 0.35 }} />
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFD54F' }} />
       </Animated.View>
-      {/* città */}
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 44, height: 92, flexDirection: 'row', alignItems: 'flex-end' }}>
+      {/* luna */}
+      <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 30, height: 30, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
+        <View style={{ position: 'absolute', left: -8, top: -8, width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F1DE', opacity: 0.12 }} />
+        <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#F4F1DE' }} />
+        <View style={{ position: 'absolute', left: 10, top: -4, width: 28, height: 28, borderRadius: 14, backgroundColor: '#16224A' }} />
+      </Animated.View>
+      {/* palazzi: pieni, coprono sole e luna quando sorgono e tramontano */}
+      <View style={{ position: 'absolute', left: 0, right: 0, top: HORIZON - 110, height: 110, flexDirection: 'row', alignItems: 'flex-end' }}>
         {BUILDINGS.map((h, i) => (
-          <View key={i} style={{ flex: 1, height: h, marginHorizontal: 1, backgroundColor: '#0F1830', opacity: 0.55, borderTopLeftRadius: 2, borderTopRightRadius: 2 }}>
-            <Animated.View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 3, gap: 3, opacity: night }}>
-              {Array.from({ length: Math.floor(h / 14) * 2 }, (_, k) => (
-                <View key={k} style={{ width: 3, height: 4, backgroundColor: (k + i) % 3 === 0 ? '#FFE08A' : 'transparent' }} />
+          <View
+            key={i}
+            style={{
+              flex: 1,
+              height: h,
+              marginHorizontal: 1,
+              backgroundColor: i % 2 ? '#1E2B4D' : '#243358',
+              borderTopLeftRadius: 2,
+              borderTopRightRadius: 2,
+            }}
+          >
+            <Animated.View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 4, gap: 4, opacity: night }}>
+              {Array.from({ length: Math.floor(h / 13) * 2 }, (_, k) => (
+                <View key={k} style={{ width: 4, height: 5, backgroundColor: (k * 7 + i) % 3 === 0 ? '#FFE08A' : 'transparent' }} />
               ))}
             </Animated.View>
           </View>
         ))}
       </View>
+      <Road />
     </View>
   );
 }
@@ -732,7 +745,7 @@ function ParkingSign() {
     return () => loop.stop();
   }, [pulse]);
   return (
-    <View style={{ position: 'absolute', right: 14, bottom: 8, alignItems: 'center' }}>
+    <View style={{ position: 'absolute', right: 14, bottom: 10, alignItems: 'center' }}>
       <Animated.View
         style={{
           position: 'absolute',
@@ -755,16 +768,12 @@ function ParkingSign() {
           borderColor: '#FFFFFF',
           alignItems: 'center',
           justifyContent: 'center',
-          shadowColor: '#000',
-          shadowOpacity: 0.5,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 3 },
           elevation: 8,
         }}
       >
         <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 32, lineHeight: 36, includeFontPadding: false }}>P</Text>
       </View>
-      <View style={{ width: 5, height: 30, backgroundColor: '#B0BEC5', borderRadius: 2 }} />
+      <View style={{ width: 5, height: 34, backgroundColor: '#B0BEC5', borderRadius: 2 }} />
     </View>
   );
 }
@@ -785,10 +794,10 @@ function Road() {
     return () => (a.stop(), b.stop());
   }, [move, bob]);
   return (
-    <View style={{ height: 88, marginTop: space.md, marginHorizontal: -space.lg, marginBottom: -space.lg }}>
-      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 44, backgroundColor: '#2B3242', overflow: 'hidden', justifyContent: 'center' }}>
+    <>
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: ROAD_H, backgroundColor: '#2B3242', overflow: 'hidden', justifyContent: 'center' }}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: '#5B6578' }} />
-        {/* strisce: scorrono verso sinistra, quindi l'auto va verso destra */}
+        {/* strisce verso sinistra: l'auto va verso destra */}
         <Animated.View style={{ flexDirection: 'row', position: 'absolute', left: 0, transform: [{ translateX: move.interpolate({ inputRange: [0, 1], outputRange: [0, -40] }) }] }}>
           {Array.from({ length: 18 }, (_, i) => (
             <View key={i} style={{ width: 22, height: 3, borderRadius: 2, backgroundColor: '#E8EAED', opacity: 0.7, marginRight: 18 }} />
@@ -799,7 +808,7 @@ function Road() {
         style={{
           position: 'absolute',
           left: '30%',
-          bottom: 14,
+          bottom: 12,
           fontSize: 34,
           transform: [{ scaleX: -1 }, { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] }) }],
         }}
@@ -807,7 +816,32 @@ function Road() {
         🚗
       </Animated.Text>
       <ParkingSign />
-    </View>
+    </>
+  );
+}
+
+/** entrata pezzo per pezzo: sale, si ingrandisce e compare */
+function Piece({ delay, children, punch }: { delay: number; children: React.ReactNode; punch?: boolean }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    v.setValue(0);
+    Animated.sequence([
+      Animated.delay(delay),
+      Animated.spring(v, { toValue: 1, friction: punch ? 4 : 6, tension: punch ? 70 : 60, useNativeDriver: true }),
+    ]).start();
+  }, [v, delay, punch]);
+  return (
+    <Animated.View
+      style={{
+        opacity: v.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1], extrapolate: 'clamp' }),
+        transform: [
+          { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [punch ? 0 : 24, 0] }) },
+          { scale: v.interpolate({ inputRange: [0, 1], outputRange: [punch ? 1.8 : 0.6, 1] }) },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -821,36 +855,38 @@ function CountdownHero({ cfg, now }: { cfg: PublicConfig; now: number }) {
   const sec = Math.floor((left % 60_000) / 1000);
   const ld = new Date(cfg.launchAt);
   const date = `${ld.getDate()}${ld.getDate() === 1 ? '°' : ''} ${ld.toLocaleDateString('it-IT', { month: 'long' })}`;
-  const shadow = { textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 };
   return (
-    <View
-      onLayout={(e) => setW(e.nativeEvent.layout.width)}
-      style={{ marginTop: space.md, borderRadius: 24, padding: space.lg, overflow: 'hidden', backgroundColor: '#1B2747' }}
-    >
-      <Sky cycle={cycle} width={w} />
-      {/* velo scuro dietro le scritte: leggibili anche quando passano sole e luna */}
-      <View style={{ alignItems: 'center', backgroundColor: 'rgba(8,14,32,0.42)', borderRadius: 18, paddingVertical: space.md, paddingHorizontal: space.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', ...shadow }}>Il {date} </Text>
-          <Text style={{ color: '#FFFFFF', fontSize: 19, fontWeight: '800', ...shadow }}>
+    <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ marginTop: space.md, borderRadius: 24, overflow: 'hidden', backgroundColor: '#101828' }}>
+      <Scene cycle={cycle} width={w} />
+      <View style={{ padding: space.lg, alignItems: 'center' }}>
+        <Piece delay={150}>
+          <Text style={{ color: '#FFD54F', fontSize: 15, fontWeight: '900', letterSpacing: 2, textAlign: 'center' }}>IL {date.toUpperCase()}</Text>
+        </Piece>
+        <Piece delay={650}>
+          <Text style={{ color: '#FFFFFF', fontSize: 44, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center', lineHeight: 50 }}>
             Parking<Text style={{ color: '#FF4B47' }}>CT</Text>
           </Text>
-          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', ...shadow }}> si sveglia</Text>
+        </Piece>
+        <Piece delay={1150}>
+          <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800', textAlign: 'center' }}>si sveglia ⏰</Text>
+        </Piece>
+        <Piece delay={1800} punch>
+          <View style={{ marginTop: space.md, backgroundColor: RED, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 6, transform: [{ rotate: '-2deg' }] }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>Basta girare a vuoto.</Text>
+          </View>
+        </Piece>
+        <Piece delay={2300}>
+          <Text style={{ color: '#D7DEEA', fontSize: 15, marginTop: space.md, lineHeight: 21, textAlign: 'center' }}>
+            Ti avviserà dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada.
+          </Text>
+        </Piece>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
+          <FlipGroup value={d} label="GIORNI" />
+          <FlipGroup value={h} label="ORE" />
+          <FlipGroup value={m} label="MINUTI" />
+          <FlipGroup value={sec} label="SECONDI" />
         </View>
-        <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: '800', marginTop: 10, lineHeight: 34, textAlign: 'center', ...shadow }}>
-          Basta girare a vuoto.
-        </Text>
-        <Text style={{ color: '#FFFFFF', fontSize: 15, marginTop: 6, lineHeight: 21, textAlign: 'center', ...shadow }}>
-          Ti avviserà dei posti che stanno per liberarsi vicino a te, qualche minuto prima che l'auto se ne vada.
-        </Text>
       </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.lg, transform: [{ perspective: 700 }, { rotateX: '16deg' }] }}>
-        <FlipGroup value={d} label="GIORNI" />
-        <FlipGroup value={h} label="ORE" />
-        <FlipGroup value={m} label="MINUTI" />
-        <FlipGroup value={sec} label="SECONDI" />
-      </View>
-      <Road />
     </View>
   );
 }
