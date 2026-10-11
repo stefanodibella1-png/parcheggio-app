@@ -1,7 +1,7 @@
 // Semafori e distributori di carburante da OpenStreetMap (Overpass API), scaricati per zone di circa 2 km
-// Passaggi a livello (railway=level_crossing) trattati come semafori: attesa con le sbarre giù ≠ parcheggio.
 // e tenuti sul telefono per 30 giorni. Servono al motore per distinguere la coda
 // al semaforo da un parcheggio. Dati © OpenStreetMap contributors (ODbL).
+// Passaggi a livello (railway=level_crossing) trattati come semafori: attesa con le sbarre giù ≠ parcheggio.
 import { kvGet, kvSet } from '../storage/db.ts';
 
 export interface Signal {
