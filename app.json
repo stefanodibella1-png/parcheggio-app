@@ -45,7 +45,7 @@
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2563EB"
+        "backgroundColor": "#FFFFFF"
       }
     },
     "plugins": [
@@ -69,7 +69,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#2563EB"
+          "color": "#E53935"
         }
       ],
       "expo-sqlite",
