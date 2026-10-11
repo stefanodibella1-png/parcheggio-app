@@ -10,6 +10,7 @@ on:
       - 'src/**'
       - 'App.tsx'
       - 'index.ts'
+      - 'app.config.js'
   workflow_dispatch:
 
 concurrency:
@@ -53,7 +54,10 @@ jobs:
       - name: Pubblica aggiornamento
         run: |
           set -o pipefail
-          npx eas-cli@latest update --channel preview --platform android --non-interactive --message "${{ github.event.head_commit.message || 'aggiornamento manuale' }}" 2>&1 | tee update.log
+          MSG="${{ github.event.head_commit.message || 'aggiornamento manuale' }}"
+          MSG="${MSG%%$'\n'*}"
+          npx eas-cli@latest update --channel preview --platform android --non-interactive --message "$MSG" 2>&1 | tee update.log
+          APP_VARIANT=public npx eas-cli@latest update --channel public --platform android --non-interactive --message "$MSG" 2>&1 | tee -a update.log
 
       - name: Riassunto errori (se fallisce)
         if: failure()

@@ -40,6 +40,8 @@ import { powerState, readiness, statusMap } from '../services/permissions.ts';
 import { applyPendingUpdate } from '../services/updates.ts';
 import { STATE_TEXT } from '../ui/theme.ts';
 import { CommunityBridge, type CommunityState } from '../community/bridge.ts';
+import { IS_PUBLIC } from '../variant.ts';
+import { uploadParking } from '../parkingct/server.ts';
 
 export interface SensorRates {
   location: number;
@@ -143,6 +145,11 @@ class Host {
     try {
       await setupNotifications();
       await this.community.init().catch(() => {});
+      if (IS_PUBLIC) {
+        const cfg = await db.kvGet('pc:config').catch(() => null);
+        const launchAt = cfg ? (JSON.parse(cfg) as { launchAt: number }).launchAt : Infinity;
+        this.community.setAllowed(Date.now() >= launchAt);
+      }
       this.state.community = { ...this.community.state };
       const overrides = await db.kvGet(CONFIG_KEY);
       this.state.config = makeConfig(overrides ? JSON.parse(overrides) : {});
@@ -341,6 +348,35 @@ class Host {
     };
     this.emitChange();
     return testId;
+  }
+
+  /**
+   * ParkingCT: il rilevamento è sempre acceso. Ogni giorno (solo con l'app aperta, dove Android
+   * permette di riavviare i sensori) si chiude il registro e se ne apre uno nuovo: l'auto
+   * parcheggiata passa al nuovo registro. I registri più vecchi di 7 giorni si cancellano.
+   */
+  setCommunityAllowed(allowed: boolean): void {
+    this.community.setAllowed(allowed);
+  }
+
+  async ensureAlwaysOn(): Promise<void> {
+    await this.ensureInit();
+    if (AppState.currentState !== 'active') return;
+    if (!this.state.active) {
+      await this.startTest(['public']);
+      return;
+    }
+    const started = this.state.startedAt ?? Date.now();
+    const st = this.engine?.state ?? 'UNKNOWN';
+    const calm = st === 'UNKNOWN' || st === 'PARKED' || st === 'PARKED_USER_AWAY' || st === 'WALKING';
+    if (Date.now() - started > 24 * 3600_000 && calm) {
+      await this.stopTest();
+      await new Promise((r) => setTimeout(r, 3000)); // Play Services: la rimozione deve finire prima della nuova richiesta
+      await this.startTest(['public']);
+      for (const t of await db.listTests()) {
+        if (t.stoppedAt !== null && Date.now() - t.stoppedAt > 7 * 24 * 3600_000) await db.deleteTest(t.id).catch(() => {});
+      }
+    }
   }
 
   /** Da chiamare quando l'utente chiude il riepilogo: applica eventuali aggiornamenti. */
@@ -682,6 +718,8 @@ class Host {
       if ((e.type === 'PARKING_RELEASED' || e.type === 'PARKING_RELEASED_INFERRED' || (e.type === 'LOW_CONFIDENCE' && e.from === 'VEHICLE_DEPARTED')) && session) {
         await stopGeofences().catch(() => {});
         await this.geocode(session);
+        // ParkingCT: il parcheggio concluso, anonimo, alimenta la mappa dei posti veri
+        if (IS_PUBLIC) void uploadParking(session).catch(() => {});
       }
       const ri = this.engine.snapshot().returnInfo;
       // dopo una ricostruzione non si notificano eventi vecchi (sarebbero solo rumore)

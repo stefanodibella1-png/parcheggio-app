@@ -2,6 +2,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { DetectionEvent, ParkingSession, ReturnInfo } from '../../engine/types.ts';
+import { IS_PUBLIC } from '../variant.ts';
 
 let configured = false;
 
@@ -122,8 +123,13 @@ export async function notifyEvent(
   ) {
     await Notifications.dismissNotificationAsync(returnId(testId)).catch(() => {});
   }
-  const txt = textFor(e, session, ri);
+  let txt = textFor(e, session, ri);
   if (!txt) return;
+  // ParkingCT: all'utente solo ciò che gli serve, senza termini tecnici
+  if (IS_PUBLIC) {
+    if (e.type !== 'PARKED') return;
+    txt = { title: '🅿️ Ho ricordato dove hai parcheggiato', body: session?.spot.address?.formatted ?? 'Apri ParkingCT per vedere dove.', important: true };
+  }
   const isReturn = RETURN_TYPES.has(e.type);
   try {
     await Notifications.scheduleNotificationAsync({

@@ -2,6 +2,7 @@
 import * as Location from 'expo-location';
 import { AppState, Platform } from 'react-native';
 import type { LocationSample } from '../../engine/types.ts';
+import { IS_PUBLIC } from '../variant.ts';
 
 export const LOCATION_TASK = 'parcheggio-location';
 export const GEOFENCE_TASK = 'parcheggio-geofence';
@@ -21,8 +22,8 @@ function optionsFor(mode: LocationMode, body: string): Location.LocationTaskOpti
     pausesUpdatesAutomatically: false, // iOS: altrimenti si ferma quando l'auto si ferma
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: 'PARCHEGGIO · test attivo',
-      notificationBody: body,
+      notificationTitle: IS_PUBLIC ? 'ParkingCT è attivo' : 'PARCHEGGIO · test attivo',
+      notificationBody: IS_PUBLIC ? 'Ricordo dove parcheggi. Tocca per aprire.' : body,
       notificationColor: '#3B82F6',
       killServiceOnDestroy: false,
     },

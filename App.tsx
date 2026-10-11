@@ -12,6 +12,8 @@ import { ResultsScreen } from './src/ui/screens/ResultsScreen.tsx';
 import { DebugScreen } from './src/ui/screens/DebugScreen.tsx';
 import { SummaryScreen } from './src/ui/screens/SummaryScreen.tsx';
 import { EventDetailScreen, ReviewScreen } from './src/ui/screens/ReviewScreens.tsx';
+import { IS_PUBLIC } from './src/variant.ts';
+import { PublicApp } from './src/parkingct/PublicApp.tsx';
 
 const TABS: { name: TabName; label: string; icon: string }[] = [
   { name: 'test', label: 'Test', icon: '●' },
@@ -110,7 +112,7 @@ function Root() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <Root />
+      {IS_PUBLIC ? <PublicApp /> : <Root />}
     </SafeAreaProvider>
   );
 }

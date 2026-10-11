@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app.json'
+      - 'app.config.js'
       - 'package.json'
       - 'modules/**'
       - '.github/workflows/build-apk.yml'
@@ -21,6 +22,12 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [lab, public]
+    env:
+      APP_VARIANT: ${{ matrix.variant }}
     steps:
       - uses: actions/checkout@v5
 
@@ -90,13 +97,22 @@ jobs:
           [ -n "$body" ] && echo "::error title=Gradle::$body" || true
 
       - name: Rinomina APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
+        run: |
+          if [ "$APP_VARIANT" = "public" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk ParkingCT-build-${{ github.run_number }}.apk
+            cp android/app/build/outputs/apk/release/app-release.apk ParkingCT.apk
+          else
+            cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
+          fi
 
       - name: Pubblica la release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: PARCHEGGIO build ${{ github.run_number }}
-          body: APK Android compilata da GitHub Actions dal commit ${{ github.sha }}.
-          files: PARCHEGGIO-build-${{ github.run_number }}.apk
+          name: PARCHEGGIO / ParkingCT build ${{ github.run_number }}
+          body: APK Android compilate da GitHub Actions dal commit ${{ github.sha }}. ParkingCT.apk è sempre l'ultima versione per gli utenti.
+          files: |
+            *-build-${{ github.run_number }}.apk
+            ParkingCT.apk
           make_latest: true
+          fail_on_unmatched_files: false

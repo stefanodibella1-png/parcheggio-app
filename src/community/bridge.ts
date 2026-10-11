@@ -35,6 +35,15 @@ export class CommunityBridge {
 
   constructor(private cfg: () => DetectionConfig, private onChange: () => void) {}
 
+  /** ParkingCT: prima del lancio la community resta spenta (si raccolgono solo i dati). */
+  setAllowed(allowed: boolean): void {
+    const configured = communityConfigured() && allowed;
+    if (configured !== this.state.configured) {
+      this.state = { ...this.state, configured };
+      this.onChange();
+    }
+  }
+
   async init(): Promise<void> {
     let id = await kvGet('community:deviceId').catch(() => null);
     if (!id) {
