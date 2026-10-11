@@ -131,6 +131,30 @@ service cloud.firestore {
         && request.resource.data.t is number);
     }
 
+    // ParkingCT: muro dei fondatori. Id = impronta del codice usato (o "inv-" + codice amico per chi
+    // ha invitato abbastanza amici). Solo chi ha usato quel codice può scrivere; il livello è quello
+    // del codice, non lo sceglie l'app. Il nome compare solo se l'utente lo vuole (visible).
+    match /wall/{id} {
+      allow read: if true;
+      allow delete: if false;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 24
+        && request.resource.data.visible is bool
+        && request.resource.data.t is number
+        && request.resource.data.by is string
+        && (
+          (exists(/databases/$(database)/documents/codes/$(id))
+            && get(/databases/$(database)/documents/codes/$(id)).data.usedBy == request.resource.data.by
+            && request.resource.data.tier == get(/databases/$(database)/documents/codes/$(id)).data.get('tier', 'base'))
+          ||
+          (id.matches('inv-[A-Z0-9]{4,12}')
+            && request.resource.data.tier == 'amici'
+            && get(/databases/$(database)/documents/invites/$(id.replace('^inv-', ''))).data.n
+               >= get(/databases/$(database)/documents/config/public).data.inviteFreeAt)
+        );
+    }
+
     // ParkingCT: parcheggi anonimi per costruire la mappa dei posti veri (solo scrittura)
     match /parkings/{id} {
       allow read: if false;

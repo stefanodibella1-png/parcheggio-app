@@ -44,15 +44,21 @@ import {
   pickAd,
   redeemCode,
   registerDevice,
+  TIER_BADGE,
+  fetchWall,
+  myWallEntry,
+  saveWallEntry,
   type Ad,
   type FounderInfo,
+  type Tier,
+  type WallEntry,
   type PublicConfig,
 } from './server.ts';
 import { ControlCenter } from './ControlCenter.tsx';
 
 const RED = '#E53935';
 
-type Screen = 'home' | 'founder' | 'info' | 'admin';
+type Screen = 'home' | 'founder' | 'info' | 'admin' | 'wall';
 
 // ---------------------------------------------------------------------------------------
 // radice
@@ -132,11 +138,12 @@ export function PublicApp() {
         onRedeemed={async () => {
           setFounder(await founderInfo());
           setParty('founder');
-          setScreen('home');
+          // resta sulla pagina Fondatori: lì sceglie se comparire nel muro
         }}
       />
     );
   else if (screen === 'info') body = <InfoScreen onBack={() => setScreen('home')} />;
+  else if (screen === 'wall') body = <WallScreen founder={founder} onBack={() => setScreen('home')} onJoin={() => setScreen('founder')} />;
   else if (screen === 'admin') body = <ControlCenter cfg={cfg} onBack={() => setScreen('home')} />;
   else
     body = (
@@ -488,6 +495,20 @@ function Home({
       ) : null}
 
       <InviteCard cfg={cfg} count={invites} founder={!!founder} />
+
+      <Pressable onPress={() => go('wall')} style={{ marginTop: space.md }}>
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 28, marginRight: space.md }}>🧱</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.text, fontSize: 17, fontWeight: '700' }}>Il muro dei fondatori</Text>
+              <Label dim size={14}>
+                {founder ? 'Scegli se comparire con il tuo nome' : 'Chi ha creduto in ParkingCT fin dall\'inizio'} ›
+              </Label>
+            </View>
+          </View>
+        </Card>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -1174,6 +1195,7 @@ function FounderScreen({
             </Label>
             {founder.tier !== 'amici' ? <Label dim style={{ marginTop: 4 }}>Codice: {founder.code}</Label> : null}
           </Card>
+          <WallChoice founder={founder} />
           {founder.gifts.length ? (
             <Card style={{ marginTop: space.md }}>
               <Label bold>🎁 I tuoi codici regalo</Label>
@@ -1308,6 +1330,182 @@ function FounderScreen({
           }}
         />
       </Card>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// muro dei fondatori
+
+const TIER_LEGEND: { tier: Tier; text: string }[] = [
+  { tier: 'platino', text: 'Platino' },
+  { tier: 'oro', text: 'Oro' },
+  { tier: 'base', text: 'Fondatore' },
+  { tier: 'regalo', text: 'Regalo di un amico' },
+  { tier: 'amici', text: 'Ha portato i suoi amici' },
+];
+
+function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () => void }) {
+  const c = usePalette();
+  const [visible, setVisible] = useState(true);
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState<{ name: string; visible: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    void myWallEntry().then((w) => {
+      setSaved(w);
+      if (w) {
+        setVisible(w.visible);
+        setName(w.name);
+      }
+    });
+  }, []);
+  return (
+    <Card style={{ marginTop: space.md }} accent={saved ? undefined : RED}>
+      <Label bold>🧱 Il muro dei fondatori</Label>
+      <Label dim size={14} style={{ marginTop: 4 }}>
+        Vuoi che il tuo nome compaia nel muro dei fondatori, visibile a tutti gli utenti di ParkingCT? Accanto al nome c'è il simbolo del tuo
+        livello {TIER_BADGE[founder.tier]}.
+      </Label>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+        {[
+          { v: true, t: 'Sì, mostra il nome' },
+          { v: false, t: 'No, resto anonimo' },
+        ].map((o) => (
+          <Pressable
+            key={o.t}
+            onPress={() => setVisible(o.v)}
+            style={{
+              flex: 1,
+              minHeight: 44,
+              borderRadius: 12,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 6,
+              backgroundColor: visible === o.v ? RED : c.cardAlt,
+            }}
+          >
+            <Text style={{ color: visible === o.v ? '#FFFFFF' : c.text, fontWeight: '700', textAlign: 'center' }}>{o.t}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {visible ? (
+        <TextInput
+          value={name}
+          onChangeText={(t) => (setName(t), setMsg(null))}
+          maxLength={24}
+          placeholder="Come vuoi comparire? es. Mario R."
+          placeholderTextColor={c.textDim}
+          style={{ marginTop: space.md, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: space.md, color: c.text, fontSize: 17 }}
+        />
+      ) : null}
+      <Label dim size={13} style={{ marginTop: space.sm }}>
+        🔒 Pubblichiamo solo il nome che scrivi tu (puoi usare un soprannome o le iniziali). Puoi cambiarlo o toglierlo quando vuoi.
+      </Label>
+      {msg ? (
+        <Label size={14} color={RED} style={{ marginTop: space.sm }}>
+          {msg}
+        </Label>
+      ) : null}
+      <Button
+        title={saved ? 'Aggiorna' : 'Conferma'}
+        busy={busy}
+        style={{ marginTop: space.md, backgroundColor: RED }}
+        onPress={async () => {
+          if (visible && !name.trim()) {
+            setMsg('Scrivi come vuoi comparire, oppure scegli "resto anonimo".');
+            return;
+          }
+          setBusy(true);
+          const ok = await saveWallEntry(founder, name, visible);
+          setBusy(false);
+          if (!ok) {
+            setMsg('Connessione assente: riprova tra poco.');
+            return;
+          }
+          setSaved({ name: name.trim(), visible: visible && !!name.trim() });
+          setMsg(visible ? 'Fatto: sei nel muro dei fondatori!' : 'Fatto: resti anonimo, ma conti tra i fondatori.');
+          onSaved?.();
+        }}
+      />
+    </Card>
+  );
+}
+
+function WallScreen({ founder, onBack, onJoin }: { founder: FounderInfo | null; onBack: () => void; onJoin: () => void }) {
+  const c = usePalette();
+  const [list, setList] = useState<WallEntry[] | null | undefined>(undefined);
+  useEffect(() => {
+    void fetchWall().then(setList);
+  }, []);
+  const shown = (list ?? []).filter((w) => w.visible && w.name);
+  const anon = (list ?? []).length - shown.length;
+  return (
+    <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xl }}>
+      <Pressable onPress={onBack} hitSlop={12}>
+        <Label color={RED}>‹ Indietro</Label>
+      </Pressable>
+      <Text style={{ fontSize: 48, textAlign: 'center', marginTop: space.md }}>🧱</Text>
+      <Text style={{ color: c.text, fontSize: 26, fontWeight: '800', textAlign: 'center' }}>Il muro dei fondatori</Text>
+      <Label dim size={15} style={{ textAlign: 'center', marginTop: 4 }}>
+        Chi ha creduto in ParkingCT fin dall'inizio. Grazie!
+      </Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: space.md }}>
+        {TIER_LEGEND.map((l) => (
+          <Label key={l.tier} size={13} dim>
+            {TIER_BADGE[l.tier]} {l.text}
+          </Label>
+        ))}
+      </View>
+      {list === undefined ? <Label dim style={{ marginTop: space.lg, textAlign: 'center' }}>Carico…</Label> : null}
+      {list === null ? <Label dim style={{ marginTop: space.lg, textAlign: 'center' }}>Connessione assente: riprova tra poco.</Label> : null}
+      {list && shown.length === 0 ? (
+        <Card style={{ marginTop: space.lg }}>
+          <Label bold>Il muro si sta riempiendo</Label>
+          <Label dim style={{ marginTop: 4 }}>
+            I primi nomi stanno per arrivare. Il tuo può essere tra questi.
+          </Label>
+        </Card>
+      ) : null}
+      {shown.length ? (
+        <Card style={{ marginTop: space.lg }}>
+          {shown.map((w, i) => (
+            <View
+              key={w.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 10,
+                borderTopWidth: i === 0 ? 0 : 1,
+                borderColor: c.border,
+              }}
+            >
+              <Text style={{ width: 34, fontSize: w.tier === 'platino' ? 22 : 18 }}>{TIER_BADGE[w.tier]}</Text>
+              <Text
+                style={{
+                  flex: 1,
+                  color: c.text,
+                  fontSize: w.tier === 'platino' ? 19 : w.tier === 'oro' ? 17 : 16,
+                  fontWeight: w.tier === 'platino' || w.tier === 'oro' ? '800' : '600',
+                }}
+              >
+                {w.name}
+              </Text>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+      {list && anon > 0 ? (
+        <Label dim style={{ marginTop: space.md, textAlign: 'center' }}>
+          …e altri {anon} fondator{anon === 1 ? 'e' : 'i'} che preferiscono restare anonim{anon === 1 ? 'o' : 'i'}.
+        </Label>
+      ) : null}
+      {founder ? (
+        <WallChoice founder={founder} onSaved={() => void fetchWall().then(setList)} />
+      ) : (
+        <Button title="⭐ Entra anche tu nel muro" style={{ marginTop: space.lg, backgroundColor: RED }} onPress={onJoin} />
+      )}
     </ScrollView>
   );
 }

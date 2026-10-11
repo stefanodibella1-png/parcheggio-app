@@ -389,3 +389,76 @@ export async function uploadParking(s: ParkingSession): Promise<void> {
     }),
   });
 }
+
+// ---------------------------------------------------------------------------------------
+// muro dei fondatori
+
+export interface WallEntry {
+  id: string;
+  name: string;
+  visible: boolean;
+  tier: Tier;
+  t: number;
+}
+
+export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4 };
+export const TIER_BADGE: Record<Tier, string> = { platino: '💎', oro: '🥇', base: '⭐', regalo: '🎁', amici: '🤝' };
+
+async function wallId(f: FounderInfo): Promise<string> {
+  if (f.tier === 'amici') return `inv-${await myInviteCode()}`;
+  return sha256Hex(normalizeCode(f.code));
+}
+
+export async function fetchWall(): Promise<WallEntry[] | null> {
+  const b = base();
+  if (!b) return null;
+  const out: WallEntry[] = [];
+  let token = '';
+  for (let page = 0; page < 10; page++) {
+    const r = await call(`${b}/wall?pageSize=300${token ? `&pageToken=${encodeURIComponent(token)}` : ''}&${key()}`);
+    if (!r?.ok) return page === 0 ? null : out;
+    const j = (await r.json()) as { documents?: { name: string; fields: Record<string, FsVal> }[]; nextPageToken?: string };
+    for (const d of j.documents ?? []) {
+      out.push({
+        id: d.name.split('/').pop() ?? '',
+        name: str(d.fields.name) ?? '',
+        visible: d.fields.visible?.booleanValue ?? false,
+        tier: ((str(d.fields.tier) as Tier | null) ?? 'base'),
+        t: num(d.fields.t) ?? 0,
+      });
+    }
+    if (!j.nextPageToken) break;
+    token = j.nextPageToken;
+  }
+  return out.sort((a, b2) => TIER_RANK[a.tier] - TIER_RANK[b2.tier] || a.t - b2.t);
+}
+
+export async function myWallEntry(): Promise<{ name: string; visible: boolean } | null> {
+  const s = await kvGet('pc:wall').catch(() => null);
+  return s ? (JSON.parse(s) as { name: string; visible: boolean }) : null;
+}
+
+/** Salva la scelta per il muro: nome visibile oppure anonimo. */
+export async function saveWallEntry(f: FounderInfo, name: string, visible: boolean): Promise<boolean> {
+  const b = base();
+  if (!b) return false;
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 24);
+  const id = await wallId(f);
+  const prev = await myWallEntry();
+  const r = await call(`${b}/wall/${id}?${key()}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      fields: {
+        name: { stringValue: visible ? clean : '' },
+        visible: { booleanValue: visible && clean.length > 0 },
+        tier: { stringValue: f.tier },
+        t: { doubleValue: prev ? Number((await kvGet('pc:wallT').catch(() => null)) ?? Date.now()) : Date.now() },
+        by: { stringValue: await deviceId() },
+      },
+    }),
+  });
+  if (!r?.ok) return false;
+  if (!prev) await kvSet('pc:wallT', String(Date.now())).catch(() => {});
+  await kvSet('pc:wall', JSON.stringify({ name: clean, visible: visible && clean.length > 0 })).catch(() => {});
+  return true;
+}

@@ -34,3 +34,13 @@ const codeOk = await fetch(`${base}/codes/${firstHash}?key=${apiKey}`);
 console.log(`::notice title=Codice reale::lettura → ${codeOk.status} ${(await codeOk.text()).slice(0, 200).replace(/\n/g, ' ')}`);
 const listCodes = await fetch(`${base}/codes?key=${apiKey}`);
 console.log(`::notice title=ParkingCT prova::config OK, registrazione zona OK, conteggio ${n}, codice inesistente → ${codeBad.status}, elenco codici → ${listCodes.status} (deve essere 403)`);
+
+// muro dei fondatori: senza un codice usato da questo telefono la scrittura va rifiutata
+{
+  const wf = { name: { stringValue: 'Prova' }, visible: { booleanValue: true }, tier: { stringValue: 'platino' }, t: { doubleValue: Date.now() }, by: { stringValue: 'ci' } };
+  const w1 = await fetch(`${base}/wall/${'0'.repeat(64)}?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: wf }) });
+  const w2 = await fetch(`${base}/wall/inv-ZZZZZZ?key=${apiKey}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { ...wf, tier: { stringValue: 'amici' } } }) });
+  const wr = await fetch(`${base}/wall?key=${apiKey}`);
+  console.log(`::notice title=Muro fondatori::scrittura falsa → ${w1.status}, invito falso → ${w2.status} (devono essere 403), lettura → ${wr.status}`);
+  if (w1.ok || w2.ok || !wr.ok) { console.log('::error title=Muro fondatori::regole da rivedere'); process.exit(1); }
+}
