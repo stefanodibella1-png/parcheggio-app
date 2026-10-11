@@ -617,21 +617,40 @@ function useCycle(): Animated.Value {
 }
 
 /**
- * Luna a spicchio (circa 1/3 illuminata), disegnata a righe sottili: bordo esterno = cerchio,
- * bordo interno = ellisse (il terminatore). Nessuna maschera, quindi nessun cerchio scuro sul cielo colorato.
+ * Luna a spicchio come nel disegno di riferimento: disco bianco meno un disco uguale spostato
+ * in alto a destra (30% del raggio). Disegnata a righe sottili: nessuna maschera, nessun cerchio scuro.
  */
-const MOON_R = 15;
-const CRESCENT = Array.from({ length: 60 }, (_, i) => {
-  const y = i * 0.5 + 0.25 - MOON_R;
-  const half = Math.sqrt(Math.max(0, MOON_R * MOON_R - y * y));
-  return { top: i * 0.5, left: MOON_R - half, width: half * (1 - 1 / 3) };
-});
+const MOON_R = 17;
+const CRESCENT: { top: number; left: number; width: number }[] = (() => {
+  const out: { top: number; left: number; width: number }[] = [];
+  const ox = 0.3 * MOON_R;
+  const oy = -0.29 * MOON_R;
+  for (let i = 0; i < MOON_R * 4; i++) {
+    const y = i * 0.5 + 0.25 - MOON_R; // rispetto al centro
+    const h = Math.sqrt(Math.max(0, MOON_R * MOON_R - y * y));
+    if (h <= 0) continue;
+    const o1 = -h;
+    const o2 = h;
+    const yi = y - oy;
+    const hi = Math.abs(yi) < MOON_R ? Math.sqrt(MOON_R * MOON_R - yi * yi) : -1;
+    const segs: [number, number][] = [];
+    if (hi < 0) segs.push([o1, o2]);
+    else {
+      const i1 = ox - hi;
+      const i2 = ox + hi;
+      if (i1 > o1) segs.push([o1, Math.min(o2, i1)]);
+      if (i2 < o2) segs.push([Math.max(o1, i2), o2]);
+    }
+    for (const [a, b] of segs) if (b - a > 0.05) out.push({ top: i * 0.5, left: MOON_R + a, width: b - a });
+  }
+  return out;
+})();
 
 function Crescent() {
   return (
-    <View style={{ width: MOON_R * 2, height: MOON_R * 2, transform: [{ rotate: '-25deg' }] }}>
+    <View style={{ width: MOON_R * 2, height: MOON_R * 2 }}>
       {CRESCENT.map((r, i) => (
-        <View key={i} style={{ position: 'absolute', top: r.top, left: r.left, width: r.width, height: 0.6, backgroundColor: '#F4F1DE' }} />
+        <View key={i} style={{ position: 'absolute', top: r.top, left: r.left, width: r.width, height: 0.6, backgroundColor: '#FFFFFF' }} />
       ))}
     </View>
   );
@@ -694,8 +713,7 @@ function Scene({ cycle, width }: { cycle: Animated.Value; width: number }) {
         <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFD54F' }} />
       </Animated.View>
       {/* luna */}
-      <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 30, height: 30, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
-        <View style={{ position: 'absolute', left: -8, top: -8, width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F1DE', opacity: 0.12 }} />
+      <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: 34, height: 34, transform: [{ translateX: moon.x }, { translateY: moon.y }] }}>
         <Crescent />
       </Animated.View>
       {/* palazzi: pieni, coprono sole e luna quando sorgono e tramontano */}
