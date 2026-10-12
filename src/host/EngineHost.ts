@@ -379,6 +379,27 @@ class Host {
     }
   }
 
+  /**
+   * Telefono appena acceso (o app appena aggiornata): riparte da sola, senza aprirla.
+   * Chiamata dal task "ParkingBoot" (index.ts), avviato dal BootReceiver nativo.
+   */
+  async startOnBoot(): Promise<void> {
+    await this.ensureInit();
+    if (this.state.active) {
+      // il servizio GPS non sopravvive al riavvio: si riaccende (Android lo consente all'accensione)
+      if (!(await locationRunning())) {
+        try {
+          await startLocation('high', 'Rilevamento automatico attivo');
+        } catch (e) {
+          this.state.error = `Posizione non avviata all'accensione: ${String(e)}`;
+        }
+      }
+      return;
+    }
+    // ParkingCT: dopo il benvenuto è sempre attiva
+    if (IS_PUBLIC && (await db.kvGet('pc:onboarded').catch(() => null)) === '1') await this.startTest(['public']);
+  }
+
   /** Da chiamare quando l'utente chiude il riepilogo: applica eventuali aggiornamenti. */
   async afterSummary(): Promise<void> {
     if (!this.state.active) await applyPendingUpdate();

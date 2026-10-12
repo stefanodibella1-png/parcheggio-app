@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { DetectionEvent, ParkingSession, ReturnInfo } from '../../engine/types.ts';
 import { IS_PUBLIC } from '../variant.ts';
+import { getPref, setPref } from './prefs.ts';
 
 let configured = false;
 
@@ -27,6 +28,29 @@ export async function setupNotifications(): Promise<void> {
       name: 'Stato del test',
       importance: Notifications.AndroidImportance.LOW,
     });
+  }
+  // pulsanti dentro le notifiche: si disattiva l'avviso senza aprire l'app
+  try {
+    await Notifications.setNotificationCategoryAsync('spot', [
+      { identifier: 'mute-voice', buttonTitle: 'Disattiva voce', options: { opensAppToForeground: false } },
+      { identifier: 'mute-spot', buttonTitle: 'Disattiva questi avvisi', options: { opensAppToForeground: false } },
+    ]);
+    await Notifications.setNotificationCategoryAsync('parked', [
+      { identifier: 'mute-park', buttonTitle: 'Non avvisarmi più', options: { opensAppToForeground: false } },
+    ]);
+    Notifications.addNotificationResponseReceivedListener((r) => {
+      const a = r.actionIdentifier;
+      const id = r.notification.request.identifier;
+      const done = (k: 'voice' | 'spotNotif' | 'parkNotif') => {
+        void setPref(k, false);
+        void Notifications.dismissNotificationAsync(id).catch(() => {});
+      };
+      if (a === 'mute-voice') done('voice');
+      else if (a === 'mute-spot') done('spotNotif');
+      else if (a === 'mute-park') done('parkNotif');
+    });
+  } catch {
+    // facoltativo
   }
 }
 
@@ -127,6 +151,7 @@ export async function notifyEvent(
   if (!txt) return;
   // ParkingCT: all'utente solo ciò che gli serve, senza termini tecnici
   if (IS_PUBLIC) {
+    if (!(await getPref('parkNotif'))) return;
     // solo quando si scende davvero e ci si allontana a piedi: una sosta seduti in auto
     // (coda, attesa, doppia fila) non è un parcheggio da ricordare
     if (!(e.type === 'PARKED_USER_AWAY' && e.from === 'PARKED')) return;
@@ -142,6 +167,7 @@ export async function notifyEvent(
         title: txt.title,
         body: txt.body,
         data: { testId, eventId: e.id, deliveredAt: Date.now() },
+        ...(IS_PUBLIC ? { categoryIdentifier: 'parked' } : {}),
         ...(Platform.OS === 'android' ? {} : { sound: false }),
       },
       trigger: Platform.OS === 'android' ? { channelId: txt.important ? 'events' : 'state' } : null,
@@ -181,6 +207,7 @@ export async function notifyNearbySpot(spot: {
   freeAt: number;
   distanceM: number;
 }, now: number): Promise<void> {
+  if (!(await getPref('spotNotif'))) return;
   const where = spot.address ? `in ${spot.address}` : 'vicino a te';
   const when = spot.kind === 'FREED' ? 'appena liberato' : `si libera ${inMinutes(Math.max(0, (spot.freeAt - now) / 1000))}`;
   try {
@@ -190,6 +217,7 @@ export async function notifyNearbySpot(spot: {
         title: spot.kind === 'FREED' ? '🅿️ Posto libero vicino a te' : '🅿️ Posto che si libera vicino a te',
         body: `Posto ${where}: ${when} · a ${spot.distanceM} m`,
         data: { kind: 'community-spot', spotId: spot.id, deliveredAt: Date.now() },
+        categoryIdentifier: 'spot',
       },
       trigger: Platform.OS === 'android' ? { channelId: 'events' } : null,
     });

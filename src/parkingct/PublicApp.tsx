@@ -14,6 +14,7 @@ import {
   Pressable,
   ScrollView,
   Share,
+  Switch,
   Text,
   TextInput,
   View,
@@ -69,6 +70,7 @@ import {
   type PublicConfig,
 } from './server.ts';
 import { ControlCenter } from './ControlCenter.tsx';
+import { PREF_LABEL, getPref, setPref, type PrefKey } from '../services/prefs.ts';
 import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
@@ -1800,6 +1802,36 @@ function WallScreen({ founder, onBack, onJoin }: { founder: FounderInfo | null; 
 // ---------------------------------------------------------------------------------------
 // informazioni, privacy, impostazioni consigliate
 
+function AlertPrefs() {
+  const c = usePalette();
+  const keys: PrefKey[] = ['voice', 'spotNotif', 'parkNotif'];
+  const [vals, setVals] = useState<Record<PrefKey, boolean> | null>(null);
+  useEffect(() => {
+    void Promise.all(keys.map(getPref)).then((v) => setVals({ voice: v[0], spotNotif: v[1], parkNotif: v[2] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!vals) return null;
+  return (
+    <Card style={{ marginTop: space.sm }}>
+      {keys.map((k, i) => (
+        <View key={k} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderColor: c.border }}>
+          <Label style={{ flex: 1, marginRight: space.md }}>{PREF_LABEL[k]}</Label>
+          <Switch
+            value={vals[k]}
+            onValueChange={(on) => {
+              setVals({ ...vals, [k]: on });
+              void setPref(k, on);
+            }}
+          />
+        </View>
+      ))}
+      <Label dim size={13} style={{ marginTop: 6 }}>
+        Puoi disattivarli anche dai pulsanti dentro la notifica.
+      </Label>
+    </Card>
+  );
+}
+
 function InfoScreen({ onBack }: { onBack: () => void }) {
   const c = usePalette();
   const [items, setItems] = useState<CheckItem[]>([]);
@@ -1821,6 +1853,8 @@ function InfoScreen({ onBack }: { onBack: () => void }) {
         Alcuni telefoni mettono in pausa le app per risparmiare batteria. Con queste impostazioni ParkingCT non perde i tuoi parcheggi.
       </Label>
       <Checklist items={items} onChanged={refresh} />
+      <Text style={{ color: c.text, fontSize: 20, fontWeight: '800', marginTop: space.xl }}>Avvisi</Text>
+      <AlertPrefs />
       <Text style={{ color: c.text, fontSize: 20, fontWeight: '800', marginTop: space.xl }}>La tua privacy</Text>
       <Label style={{ marginTop: space.sm, lineHeight: 22 }}>
         • La posizione del telefono resta sul telefono: serve a ricordare dove parcheggi.{'\n'}• Al server inviamo solo, in forma anonima, i

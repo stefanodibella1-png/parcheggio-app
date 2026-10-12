@@ -5,6 +5,7 @@
 import type { DetectionConfig } from '../../engine/config.ts';
 import type { DetectionEvent, EngineSnapshot, LocationSample, ParkingSession, ReturnInfo } from '../../engine/types.ts';
 import { notifyNearbySpot } from '../services/notifications.ts';
+import { getPref } from '../services/prefs.ts';
 import { speak } from '../services/voice.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
 import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
@@ -184,7 +185,7 @@ export class CommunityBridge {
           if (this.notified.get(s.id) === s.kind) continue;
           this.notified.set(s.id, s.kind);
           await notifyNearbySpot(s, now);
-          if (driving) {
+          if (driving && (await getPref('voice'))) {
             const where = s.address ? `in ${s.address}` : 'vicino a te';
             const mins = Math.max(1, Math.round((s.freeAt - now) / 60000));
             speak(
