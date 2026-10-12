@@ -26,6 +26,7 @@ import { checkName } from './moderation.ts';
 import { host } from '../host/EngineHost.ts';
 import { kvGet, kvSet, listTests } from '../storage/db.ts';
 import { shareExport } from '../services/exportTest.ts';
+import { VersionNote } from '../ui/components/VersionNote.tsx';
 import { APK_URL, TIER_BADGE, euro, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
 
 const RED = '#E53935';
@@ -248,6 +249,7 @@ function Settings() {
   const [msg, setMsg] = useState<string | null>(null);
   return (
     <>
+    <VersionNote style={{ marginTop: space.md }} />
     <ExportData />
     <EarlyCommunity />
     <Card style={{ marginTop: space.md }}>

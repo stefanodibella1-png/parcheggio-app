@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, BackHandler, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
-import { shortVersion, updateAvailable, updateNow, updatePending } from '../../services/updates.ts';
+import { updateAvailable, updateNow, updatePending } from '../../services/updates.ts';
 import { Button, Card, Label, SectionTitle, Title } from '../components/basics.tsx';
 import { CarCard, Checklist, CommunityCard, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
 import { SCENARIOS } from '../scenarios.ts';
 import { fmtDuration } from '../format.ts';
 import { space, usePalette } from '../theme.ts';
+import { VersionNote } from '../components/VersionNote.tsx';
 import type { Nav } from '../nav.ts';
 
 export function TestScreen({ nav }: { nav: Nav }) {
@@ -125,9 +126,7 @@ export function TestScreen({ nav }: { nav: Nav }) {
             }}
           />
         ) : null}
-        <Label dim size={12} style={{ marginTop: space.xs }}>
-          {updAvail || updatePending() ? `Versione ${shortVersion()} · aggiornamento disponibile` : `✓ App aggiornata · versione ${shortVersion()}`}
-        </Label>
+        <VersionNote pending={updAvail || updatePending()} style={{ marginTop: space.xs }} />
         {s.error ? (
           <Card style={{ marginTop: space.md, borderColor: c.danger }}>
             <Label color={c.danger}>{s.error}</Label>

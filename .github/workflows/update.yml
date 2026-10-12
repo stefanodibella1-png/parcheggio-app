@@ -56,6 +56,8 @@ jobs:
           set -o pipefail
           MSG="${{ github.event.head_commit.message || 'aggiornamento manuale' }}"
           MSG="${MSG%%$'\n'*}"
+          # data/ora e nota delle modifiche, mostrate nell'app
+          node -e "require('fs').writeFileSync('src/releaseNote.ts', '// Scritto in automatico da .github/workflows/update.yml a ogni aggiornamento.\nexport const RELEASE: { at: number; note: string } = ' + JSON.stringify({ at: Date.now(), note: process.argv[1] }) + ';\n')" "$MSG"
           npx eas-cli@latest update --channel preview --platform android --non-interactive --message "$MSG" 2>&1 | tee update.log
           APP_VARIANT=public npx eas-cli@latest update --channel public --platform android --non-interactive --message "$MSG" 2>&1 | tee -a update.log
 

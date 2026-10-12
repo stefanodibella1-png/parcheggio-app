@@ -71,6 +71,7 @@ import {
 } from './server.ts';
 import { ControlCenter } from './ControlCenter.tsx';
 import { PREF_LABEL, getPref, setPref, type PrefKey } from '../services/prefs.ts';
+import { VersionNote } from '../ui/components/VersionNote.tsx';
 import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
@@ -545,6 +546,7 @@ function Home({
           </View>
         </Card>
       </Pressable>
+      <VersionNote pending={upd} style={{ marginTop: space.lg, alignItems: 'center' }} />
     </ScrollView>
   );
 }
@@ -2106,9 +2108,7 @@ function InfoScreen({ onBack }: { onBack: () => void }) {
         parcheggi conclusi e i posti che si liberano, senza nome né numero di telefono.{'\n'}• Per statistiche anonime usiamo solo la tua zona (circa
         5 km).{'\n'}• Nessuno vede mai dove sei tu.
       </Label>
-      <Label dim size={13} style={{ marginTop: space.xl }}>
-        ParkingCT · versione {shortVersion()}
-      </Label>
+      <VersionNote style={{ marginTop: space.xl }} />
     </ScrollView>
   );
 }

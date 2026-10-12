@@ -1,6 +1,8 @@
 // Aggiornamenti automatici (EAS Update), pubblicati da GitHub Actions a ogni modifica JS.
 // Regola: MAI riavviare l'app durante un test attivo.
 import * as Updates from 'expo-updates';
+import { RELEASE } from '../releaseNote.ts';
+import { installedBuild } from './appInstall.ts';
 
 export type UpdateStatus = 'disabled' | 'checking' | 'none' | 'downloaded' | 'error';
 
@@ -78,6 +80,15 @@ export async function updateAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Data e ora dell'aggiornamento installato + nota delle modifiche (per mostrarle nell'app). */
+export function releaseInfo(): { when: string; note: string; build: number } {
+  const t = Updates.createdAt ? Updates.createdAt.getTime() : RELEASE.at;
+  const when = t
+    ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'installazione originale';
+  return { when, note: Updates.updateId ? RELEASE.note : '', build: installedBuild() };
 }
 
 /** Codice breve della versione installata. */
