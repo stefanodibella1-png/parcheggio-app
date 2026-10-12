@@ -175,7 +175,8 @@ export class DetectionEngine {
   private out: DetectionEvent[] = [];
 
   constructor(cfg: DetectionConfig = DEFAULT_CONFIG, idPrefix = 'T') {
-    this.cfg = cfg;
+    // test iniziati con una versione precedente: le soglie nuove prendono il valore predefinito
+    this.cfg = { ...DEFAULT_CONFIG, ...cfg };
     this.m = {
       v: 1,
       idPrefix,
@@ -239,7 +240,9 @@ export class DetectionEngine {
     const e = new DetectionEngine(cfg);
     const parsed = JSON.parse(json) as Memory;
     if (parsed.v !== 1) throw new Error('Versione stato motore non supportata');
-    e.m = parsed;
+    // campi aggiunti dopo il salvataggio (aggiornamento dell'app a test in corso): valori iniziali.
+    // Senza questo, uno stato salvato da una versione precedente faceva crashare l'app (schermo nero).
+    e.m = { ...e.m, ...parsed };
     return e;
   }
 
