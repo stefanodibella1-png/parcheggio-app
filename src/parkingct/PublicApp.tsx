@@ -93,9 +93,7 @@ export function PublicApp() {
       Alert.alert('Codice attivo su un altro telefono', 'Il tuo codice ParkingCT è stato inserito su un altro telefono. Per usarlo di nuovo qui, inseriscilo nella pagina Fondatori.');
     }
     const launched = Date.now() >= conf.launchAt;
-    // i Tester vedono i posti che si liberano anche prima del lancio (finché il periodo è attivo)
-    const left = testerLeftMs(await founderInfo(), conf, Date.now());
-    host.setCommunityAllowed(launched || (left !== null && left > 0));
+    host.setCommunityAllowed(launched);
     if (launched && (await kvGet('pc:launchParty').catch(() => null)) !== '1') {
       await kvSet('pc:launchParty', '1').catch(() => {});
       setParty('launch');
@@ -1376,7 +1374,7 @@ function FounderScreen({
               priceLabel={`offerta libera · da ${euro(cfg?.testerMin ?? 1)}`}
               perks={[
                 `🧪 ParkingCT completa per ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi dall'attivazione`,
-                '🚀 Accesso anticipato: vedi i posti che si liberano prima del lancio',
+                '🚗 Ricorda dove parcheggi e, dal lancio, ti avvisa dei posti che si liberano',
                 '🛠️ Partecipi allo sviluppo: le tue segnalazioni contano',
               ]}
               note={`Scegli tu quanto dare, da ${euro(cfg?.testerMin ?? 1)}. Con la carta Stripe trattiene circa ${euro(cardFee(cfg?.testerMin ?? 1))} di commissione. Dopo ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi puoi diventare Fondatore per continuare.`}
