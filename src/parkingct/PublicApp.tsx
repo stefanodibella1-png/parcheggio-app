@@ -446,7 +446,7 @@ function Home({
         <Pressable onPress={() => go('founder')}>
           <Label size={13} color={RED} bold style={{ marginTop: 2 }}>
             {TIER_BADGE[founder.tier]} {TIER_LABEL[founder.tier]}
-            {founder.honorary && founder.tier !== 'amici' ? ' · 🤝 Fondatore onorario' : ''}
+            {''}
             {founder.tier === 'tester' && testerLeft !== null && testerLeft > 0
               ? ` · ancora ${Math.ceil(testerLeft / 86_400_000)} giorni ›`
               : founder.gifts.length
@@ -454,6 +454,13 @@ function Home({
                 : ''}
           </Label>
         </Pressable>
+      ) : null}
+
+      {founder?.honorary ? (
+        <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#FFC107', borderColor: '#B8860B', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
+          <Text style={{ fontSize: 16 }}>🏆</Text>
+          <Text style={{ color: '#3E2723', fontWeight: '900', fontSize: 13, letterSpacing: 1, marginLeft: 6 }}>FONDATORE ONORARIO</Text>
+        </View>
       ) : null}
 
       {upd ? (
@@ -1114,6 +1121,48 @@ function inviteMessage(cfg: PublicConfig | null, code: string): string {
   );
 }
 
+/** il titolo di Fondatore onorario, ben visibile: fascia dorata */
+function HonorBanner({ done, paid, goal }: { done: boolean; paid: boolean; goal: number }) {
+  const shine = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shine, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(shine, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shine]);
+  return (
+    <Animated.View
+      style={{
+        marginTop: space.md,
+        borderRadius: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        backgroundColor: '#FFC107',
+        borderWidth: 2,
+        borderColor: '#B8860B',
+        alignItems: 'center',
+        transform: [{ scale: shine.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) }],
+      }}
+    >
+      <Text style={{ fontSize: 30 }}>🏆</Text>
+      <Text style={{ color: '#3E2723', fontSize: 20, fontWeight: '900', letterSpacing: 1.5, textAlign: 'center' }}>FONDATORE ONORARIO</Text>
+      <Text style={{ color: '#3E2723', fontSize: 14, fontWeight: '700', textAlign: 'center', marginTop: 2 }}>
+        {done
+          ? paid
+            ? 'È tuo! Il titolo più alto, con 🤝 accanto al tuo nome nel muro.'
+            : 'È tuo! ParkingCT gratis per sempre, con 🤝 accanto al tuo nome nel muro.'
+          : paid
+            ? `Al ${goal}° amico: il titolo più alto, con 🤝 nel muro dei fondatori`
+            : `Al ${goal}° amico: ParkingCT gratis per sempre`}
+      </Text>
+    </Animated.View>
+  );
+}
+
 function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: number | null; paid: boolean }) {
   const c = usePalette();
   const [code, setCode] = useState('');
@@ -1139,9 +1188,10 @@ function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: num
       </Text>
       <Label dim style={{ marginTop: 4 }}>
         {paid
-          ? `Porta ${goal} amici su ParkingCT e diventi anche Fondatore onorario.`
-          : `Porta ${goal} amici su ParkingCT: diventi Fondatore onorario e per te è gratis per sempre, senza pagare nulla.`}
+          ? `Porta ${goal} amici su ParkingCT e ottieni il titolo più alto.`
+          : `Porta ${goal} amici su ParkingCT e non paghi nulla, per sempre.`}
       </Label>
+      <HonorBanner done={done} paid={paid} goal={goal} />
       {/* una spunta verde per ogni amico che ha installato l'app con il tuo codice */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: space.md, justifyContent: 'center' }}>
         {Array.from({ length: Math.max(goal, 1) }, (_, i) => {
@@ -1167,7 +1217,7 @@ function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: num
         })}
       </View>
       <Label bold size={15} style={{ marginTop: space.sm, textAlign: 'center' }} color={done ? '#2E7D32' : undefined}>
-        {count === null ? '…' : done ? `🎉 ${n} amici: sei Fondatore onorario!` : `${n} su ${goal} amici hanno installato ParkingCT`}
+        {count === null ? '…' : done ? `🎉 ${n} amici: ce l'hai fatta!` : `${n} su ${goal} amici hanno installato ParkingCT`}
       </Label>
       <View style={{ alignItems: 'center', marginTop: space.md }}>
         <Label size={13} dim>
