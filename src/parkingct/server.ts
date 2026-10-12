@@ -47,7 +47,7 @@ const DEFAULT_CONFIG: PublicConfig = {
   priceGold: 9.9,
   pricePlat: 19.9,
   giftsGold: 3,
-  giftsPlat: 7,
+  giftsPlat: 6,
   inviteFreeAt: 10,
   landingUrl: '',
   linkBase: '',

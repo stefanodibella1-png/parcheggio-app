@@ -14,7 +14,7 @@ const cfgFile = JSON.parse(readFileSync(process.env.CFG_JSON, 'utf8'));
 const TIERS = [
   { tier: 'base', name: 'ParkingCT — Fondatore', price: cfgFile.priceBase ?? 3.9, gifts: 0, field: 'linkBase' },
   { tier: 'oro', name: 'ParkingCT — Fondatore Oro', price: cfgFile.priceGold ?? 9.9, gifts: cfgFile.giftsGold ?? 3, field: 'linkGold' },
-  { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 7, field: 'linkPlat' },
+  { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 6, field: 'linkPlat' },
   // offerta libera: l'importo lo sceglie chi paga; con la carta minimo testerMinCard (1,30 €), lo dice Stripe solo se si scrive meno
   { tier: 'tester', name: 'ParkingCT — Tester (offerta libera)', price: cfgFile.testerMinCard ?? 1.3, gifts: 0, field: 'linkTester', custom: true },
   // Tester scaduto dopo il lancio: pagamento per continuare a usare l'app

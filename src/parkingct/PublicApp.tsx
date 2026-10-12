@@ -1305,7 +1305,7 @@ function FounderScreen({
   }, []);
   const support = () => void buy('oro');
   const gold = cfg?.giftsGold ?? 3;
-  const plat = cfg?.giftsPlat ?? 7;
+  const plat = cfg?.giftsPlat ?? 6;
   // dopo il lancio non si può più diventare fondatori (i codici già comprati restano validi)
   const founderOpen = !cfg || Date.now() < cfg.launchAt;
   return (

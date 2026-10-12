@@ -57,7 +57,7 @@ const cfgDoc = await api('PATCH', `${fsBase}/config/public?${cfgMask}`, {
     priceGold: { doubleValue: cfgFile.priceGold ?? 9.9 },
     pricePlat: { doubleValue: cfgFile.pricePlat ?? 19.9 },
     giftsGold: { doubleValue: cfgFile.giftsGold ?? 3 },
-    giftsPlat: { doubleValue: cfgFile.giftsPlat ?? 7 },
+    giftsPlat: { doubleValue: cfgFile.giftsPlat ?? 6 },
     inviteFreeAt: { doubleValue: cfgFile.inviteFreeAt ?? 10 },
     landingUrl: { stringValue: cfgFile.landingUrl ?? '' },
     testerDays: { doubleValue: cfgFile.testerDays ?? 90 },

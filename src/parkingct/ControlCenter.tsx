@@ -337,7 +337,7 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
   useEffect(() => {
     void reload();
   }, [reload]);
-  const gifts = tier === 'oro' ? cfg?.giftsGold ?? 3 : tier === 'platino' ? cfg?.giftsPlat ?? 7 : 0;
+  const gifts = tier === 'oro' ? cfg?.giftsGold ?? 3 : tier === 'platino' ? cfg?.giftsPlat ?? 6 : 0;
   const price = tier === 'oro' ? cfg?.priceGold : tier === 'platino' ? cfg?.pricePlat : tier === 'tester' ? cfg?.testerMin : cfg?.priceBase;
   return (
     <View style={{ marginTop: space.md }}>
