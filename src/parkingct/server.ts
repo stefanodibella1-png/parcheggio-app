@@ -175,12 +175,14 @@ export const TIER_LABEL: Record<Tier, string> = {
   oro: 'Fondatore Oro',
   platino: 'Fondatore Platino',
   regalo: 'Fondatore (regalo di un amico)',
-  amici: 'Fondatore ad honorem',
+  amici: 'Fondatore onorario',
   tester: 'Tester',
   continua: 'Utente ParkingCT',
 };
 
 export interface FounderInfo {
+  /** ha portato abbastanza amici: titolo di Fondatore onorario (anche se aveva già pagato) */
+  honorary?: boolean;
   /** prima attivazione del codice (per il Tester: inizio dei 3 mesi) */
   start?: number;
   code: string;
@@ -237,7 +239,8 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
   const tier = (str(doc.fields.tier) as Tier | null) ?? 'base';
   // inizio: la prima attivazione in assoluto (un cambio telefono o una reinstallazione non lo azzera)
   const start = num(doc.fields.start) ?? (usedBy ? num(doc.fields.usedAt) : null) ?? Date.now();
-  const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode), start };
+  const prevInfo = await founderInfo();
+  const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode), start, honorary: prevInfo?.honorary };
   await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
   await kvSet('pc:founderCheckT', String(Date.now())).catch(() => {});
   return result;
@@ -270,7 +273,7 @@ export async function founderInfo(): Promise<FounderInfo | null> {
   if (!s) return null;
   const f = JSON.parse(s) as Partial<FounderInfo>;
   if (!f.code && f.tier !== 'amici') return null;
-  return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [], start: f.start ?? f.t ?? 0 };
+  return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [], start: f.start ?? f.t ?? 0, honorary: f.honorary ?? f.tier === 'amici' };
 }
 
 /** Quali codici regalo sono già stati usati dagli amici. */
@@ -475,6 +478,8 @@ export interface WallEntry {
   /** moderazione: 'ok' (approvato modName), 'hidden' (nascosto dal control center), '' (non ancora visto) */
   mod: string;
   modName: string;
+  /** Fondatore onorario (10 amici portati) */
+  honor: boolean;
 }
 
 /** il nome compare nel muro pubblico? */
@@ -510,6 +515,7 @@ export async function fetchWall(): Promise<WallEntry[] | null> {
         t: num(d.fields.t) ?? 0,
         mod: str(d.fields.mod) ?? '',
         modName: str(d.fields.modName) ?? '',
+        honor: d.fields.honor?.booleanValue ?? false,
       });
     }
     if (!j.nextPageToken) break;
@@ -572,7 +578,7 @@ export async function saveWallEntry(f: FounderInfo, name: string, visible: boole
   const newName = clean.length > 0 && clean !== (prev?.name ?? '');
   const edits = (prev?.edits ?? 0) + (newName ? 1 : 0);
   if (newName && edits > WALL_MAX_NAMES) return 'limit';
-  const mask = ['name', 'visible', 'tier', 't', 'by', 'edits'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
+  const mask = ['name', 'visible', 'tier', 't', 'by', 'edits', 'honor', 'inv'].map((k) => `updateMask.fieldPaths=${k}`).join('&');
   const r = await call(`${b}/wall/${id}?${mask}&${key()}`, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -583,6 +589,8 @@ export async function saveWallEntry(f: FounderInfo, name: string, visible: boole
         t: { doubleValue: prev?.t ?? Date.now() },
         by: { stringValue: await deviceId() },
         edits: { integerValue: String(edits) },
+        honor: { booleanValue: !!f.honorary },
+        inv: { stringValue: await myInviteCode() },
       },
     }),
   });
@@ -623,7 +631,8 @@ export function payLink(cfg: PublicConfig | null, tier: Tier): string {
 
 /** Tester: millisecondi di uso rimasti (null se non è un tester) */
 export function testerLeftMs(f: FounderInfo | null, cfg: PublicConfig | null, now: number): number | null {
-  if (!f || f.tier !== 'tester') return null;
+  // un Tester che porta i suoi amici diventa Fondatore onorario: niente più scadenza
+  if (!f || f.tier !== 'tester' || f.honorary) return null;
   const days = cfg?.testerDays ?? 90;
   return (f.start ?? f.t) + days * 86_400_000 - now;
 }
@@ -673,4 +682,16 @@ export async function collectPurchase(): Promise<{ code: string; result: RedeemR
 export function formatCodeInput(t: string): string {
   const c = t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
   return [c.slice(0, 4), c.slice(4, 8), c.slice(8, 12)].filter(Boolean).join('-');
+}
+
+/** Segna questo telefono come Fondatore onorario (anche se aveva già pagato) e aggiorna il muro. */
+export async function markHonorary(): Promise<FounderInfo> {
+  const prev = await founderInfo();
+  const info: FounderInfo = prev
+    ? { ...prev, honorary: true }
+    : { code: 'INVITI', t: Date.now(), tier: 'amici', gifts: [], honorary: true };
+  await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
+  const w = await myWallEntry(info).catch(() => null);
+  if (w) await saveWallEntry(info, w.name, w.visible).catch(() => {});
+  return info;
 }

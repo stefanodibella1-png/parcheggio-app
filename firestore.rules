@@ -143,8 +143,13 @@ service cloud.firestore {
     // ha invitato abbastanza amici). Solo chi ha usato quel codice può scrivere; il livello è quello
     // del codice, non lo sceglie l'app. Il nome compare solo se l'utente lo vuole (visible).
     function wallUserOk(id) {
-      return request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by', 'mod', 'modName', 'edits'])
+      return request.resource.data.keys().hasOnly(['name', 'visible', 'tier', 't', 'by', 'mod', 'modName', 'edits', 'honor', 'inv'])
         && request.resource.data.get('edits', 0) is int
+        // titolo di Fondatore onorario solo con abbastanza amici portati
+        && (request.resource.data.get('honor', false) == false
+          || (request.resource.data.inv is string && request.resource.data.inv.size() <= 12
+            && get(/databases/$(database)/documents/invites/$(request.resource.data.inv)).data.n
+               >= get(/databases/$(database)/documents/config/public).data.inviteFreeAt))
         && request.resource.data.name is string && request.resource.data.name.size() <= 24
         && request.resource.data.visible is bool
         && request.resource.data.t is number

@@ -33,6 +33,7 @@ import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
   euro,
+  markHonorary,
   cardFee,
   testerLeftMs,
   collectPurchase,
@@ -84,7 +85,7 @@ export function PublicApp() {
   const [screen, setScreen] = useState<Screen>('home');
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
   const [founder, setFounder] = useState<FounderInfo | null>(null);
-  const [party, setParty] = useState<null | 'launch' | 'founder'>(null);
+  const [party, setParty] = useState<null | 'launch' | 'founder' | 'honor'>(null);
 
   const refreshCfg = useCallback(async () => {
     const conf = await getConfig();
@@ -177,10 +178,8 @@ export function PublicApp() {
         founder={founder}
         go={setScreen}
         onInviteReward={async () => {
-          const info: FounderInfo = { code: 'INVITI', t: Date.now(), tier: 'amici', gifts: [] };
-          await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
-          setFounder(info);
-          setParty('founder');
+          setFounder(await markHonorary());
+          setParty('honor');
         }}
       />
     );
@@ -408,7 +407,7 @@ function Home({
   }, [sessionId]);
 
   useEffect(() => {
-    if (!founder && cfg && cfg.inviteFreeAt > 0 && invites !== null && invites >= cfg.inviteFreeAt) onInviteReward();
+    if (!founder?.honorary && cfg && cfg.inviteFreeAt > 0 && invites !== null && invites >= cfg.inviteFreeAt) onInviteReward();
   }, [founder, cfg, invites, onInviteReward]);
 
   const launched = cfg ? now >= cfg.launchAt : false;
@@ -447,6 +446,7 @@ function Home({
         <Pressable onPress={() => go('founder')}>
           <Label size={13} color={RED} bold style={{ marginTop: 2 }}>
             {TIER_BADGE[founder.tier]} {TIER_LABEL[founder.tier]}
+            {founder.honorary && founder.tier !== 'amici' ? ' · 🤝 Fondatore onorario' : ''}
             {founder.tier === 'tester' && testerLeft !== null && testerLeft > 0
               ? ` · ancora ${Math.ceil(testerLeft / 86_400_000)} giorni ›`
               : founder.gifts.length
@@ -542,7 +542,7 @@ function Home({
         </Card>
       ) : null}
 
-      <InviteCard cfg={cfg} count={invites} founder={!!founder} />
+      <InviteCard cfg={cfg} count={invites} paid={!!founder && founder.tier !== 'amici' && founder.tier !== 'tester'} />
 
       <Pressable onPress={() => go('wall')} style={{ marginTop: space.md }}>
         <Card>
@@ -1114,7 +1114,7 @@ function inviteMessage(cfg: PublicConfig | null, code: string): string {
   );
 }
 
-function InviteCard({ cfg, count, founder }: { cfg: PublicConfig | null; count: number | null; founder: boolean }) {
+function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: number | null; paid: boolean }) {
   const c = usePalette();
   const [code, setCode] = useState('');
   useEffect(() => {
@@ -1122,45 +1122,66 @@ function InviteCard({ cfg, count, founder }: { cfg: PublicConfig | null; count: 
   }, []);
   const goal = cfg?.inviteFreeAt ?? 10;
   const n = count ?? 0;
-  const level = n >= goal ? 'Fondatore ad honorem' : n >= 3 ? 'Ambasciatore' : n >= 1 ? 'Apripista' : null;
+  const done = goal > 0 && n >= goal;
+  const msg = inviteMessage(cfg, code);
+  const whatsapp = async () => {
+    const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      await Share.share({ message: msg });
+    }
+  };
   return (
     <Card style={{ marginTop: space.md }}>
-      <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>🤝 Invita i tuoi amici</Text>
+      <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>
+        🤝 Invita {goal} amici ed è gratis
+      </Text>
       <Label dim style={{ marginTop: 4 }}>
-        {founder || goal <= 0
-          ? 'Più amici nella tua zona = più posti segnalati per tutti.'
-          : `Porta ${goal} amici su ParkingCT e per te è gratis per sempre, senza pagare nulla.`}
+        {paid
+          ? `Porta ${goal} amici su ParkingCT e diventi anche Fondatore onorario.`
+          : `Porta ${goal} amici su ParkingCT: diventi Fondatore onorario e per te è gratis per sempre, senza pagare nulla.`}
       </Label>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.md }}>
-        <View>
-          <Label size={13} dim>
-            Il tuo codice amico
-          </Label>
-          <Text selectable style={{ color: c.text, fontSize: 24, fontWeight: '800', letterSpacing: 3 }}>
-            {code || '……'}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: RED, fontSize: 24, fontWeight: '800' }}>{count === null ? '–' : n}</Text>
-          <Label size={13} dim>
-            amici invitati
-          </Label>
-        </View>
+      {/* una spunta verde per ogni amico che ha installato l'app con il tuo codice */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: space.md, justifyContent: 'center' }}>
+        {Array.from({ length: Math.max(goal, 1) }, (_, i) => {
+          const ok = i < n;
+          return (
+            <View
+              key={i}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: ok ? '#2E7D32' : c.cardAlt,
+                borderWidth: ok ? 0 : 2,
+                borderColor: c.border,
+                borderStyle: ok ? 'solid' : 'dashed',
+              }}
+            >
+              <Text style={{ color: ok ? '#FFFFFF' : c.textDim, fontSize: ok ? 20 : 14, fontWeight: '800' }}>{ok ? '✓' : i + 1}</Text>
+            </View>
+          );
+        })}
       </View>
-      {!founder && goal > 0 ? (
-        <View style={{ height: 8, backgroundColor: c.cardAlt, borderRadius: 4, marginTop: space.sm, overflow: 'hidden' }}>
-          <View style={{ width: `${Math.min(100, (n / goal) * 100)}%`, height: 8, backgroundColor: RED }} />
-        </View>
-      ) : null}
-      {level ? (
-        <Label size={14} bold color={RED} style={{ marginTop: space.sm }}>
-          🏅 {level}
-        </Label>
-      ) : null}
-      <Label dim size={13} style={{ marginTop: space.sm }}>
-        1 amico: Apripista · 3 amici: Ambasciatore{goal > 0 ? ` · ${goal} amici: gratis per sempre` : ''}
+      <Label bold size={15} style={{ marginTop: space.sm, textAlign: 'center' }} color={done ? '#2E7D32' : undefined}>
+        {count === null ? '…' : done ? `🎉 ${n} amici: sei Fondatore onorario!` : `${n} su ${goal} amici hanno installato ParkingCT`}
       </Label>
-      <Button title="Invita su WhatsApp o altro" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => Share.share({ message: inviteMessage(cfg, code) })} />
+      <View style={{ alignItems: 'center', marginTop: space.md }}>
+        <Label size={13} dim>
+          Il tuo codice amico (lo inseriscono al primo avvio)
+        </Label>
+        <Text selectable style={{ color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: 4 }}>
+          {code || '……'}
+        </Text>
+      </View>
+      <Button title="📲 Invita su WhatsApp" style={{ marginTop: space.md, backgroundColor: '#25D366' }} onPress={() => void whatsapp()} />
+      <Label dim size={13} style={{ marginTop: 6, textAlign: 'center' }}>
+        In WhatsApp puoi scegliere più contatti insieme: ricevono il link e il tuo codice.
+      </Label>
+      <Button small variant="ghost" title="Altri modi (SMS, Telegram, email…)" style={{ marginTop: space.sm }} onPress={() => Share.share({ message: msg })} />
     </Card>
   );
 }
@@ -1723,6 +1744,7 @@ function WallScreen({ founder, onBack, onJoin }: { founder: FounderInfo | null; 
                 }}
               >
                 {w.name}
+                {w.honor && w.tier !== 'amici' ? ' 🤝' : ''}
               </Text>
             </View>
           ))}
@@ -1784,7 +1806,7 @@ function InfoScreen({ onBack }: { onBack: () => void }) {
 
 const CONFETTI = ['🎉', '🎊', '✨', '🚗', '🅿️', '⭐', '🎈'];
 
-function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'founder'; founder: boolean; onClose: (next?: 'code') => void }) {
+function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'founder' | 'honor'; founder: boolean; onClose: (next?: 'code') => void }) {
   const c = usePalette();
   const { width, height } = Dimensions.get('window');
   const pieces = useRef(
@@ -1812,11 +1834,13 @@ function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'foun
     Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   }, [kind, pieces, scale, height]);
   if (!kind) return null;
-  const title = kind === 'launch' ? 'ParkingCT è attivo! 🎉' : 'Benvenuto tra i fondatori! ⭐';
+  const title = kind === 'launch' ? 'ParkingCT è attivo! 🎉' : kind === 'honor' ? 'Sei Fondatore onorario! 🤝' : 'Benvenuto tra i fondatori! ⭐';
   const text =
     kind === 'launch'
       ? `Da oggi ricevi gli avvisi dei posti che si liberano vicino a te.${founder ? ' Grazie per averci sostenuto fin dall\'inizio!' : ''}`
-      : 'ParkingCT nasce anche grazie a te. Per te è attiva gratis, per sempre.';
+      : kind === 'honor'
+        ? 'Hai portato i tuoi amici su ParkingCT: grazie! Hai il titolo di Fondatore onorario e per te l\'app è gratis, per sempre.'
+        : 'ParkingCT nasce anche grazie a te. Per te è attiva gratis, per sempre.';
   return (
     <Modal transparent animationType="fade" visible onRequestClose={() => onClose()}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: space.xl }}>
@@ -1826,7 +1850,7 @@ function Celebration({ kind, founder, onClose }: { kind: null | 'launch' | 'foun
           </Animated.Text>
         ))}
         <Animated.View style={{ transform: [{ scale }], backgroundColor: c.card, borderRadius: 24, padding: space.xl, alignItems: 'center' }}>
-          <Text style={{ fontSize: 64 }}>{kind === 'launch' ? '🎉' : '⭐'}</Text>
+          <Text style={{ fontSize: 64 }}>{kind === 'launch' ? '🎉' : kind === 'honor' ? '🤝' : '⭐'}</Text>
           <Text style={{ color: c.text, fontSize: 24, fontWeight: '800', textAlign: 'center', marginTop: space.md }}>{title}</Text>
           <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm }}>
             {text}
