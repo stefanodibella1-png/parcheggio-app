@@ -530,36 +530,12 @@ function Home({
 
       {!launched ? <ComingSoon /> : null}
 
-      {/* sostenitore */}
-      {founder?.tier === 'tester' && !launched && cfg ? (
-        <Card accent={RED} style={{ marginTop: space.md }}>
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>⭐ Diventa fondatore prima del {fmtLaunch(cfg.launchAt)}</Text>
-          <Label style={{ marginTop: 4 }}>
-            Con {euro(cfg.priceBase)}, una volta sola, ParkingCT resta tua per sempre, anche dopo i 3 mesi da Tester. Dal {fmtLaunch(cfg.launchAt)} non sarà più
-            possibile.
-          </Label>
-          <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
-            ⏳ Mancano {Math.max(0, Math.ceil((cfg.launchAt - now) / 86_400_000))} giorni
-          </Label>
-          <Button title={`Diventa fondatore · ${euro(cfg.priceBase)}`} style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
-        </Card>
-      ) : null}
-
-      {!founder && !launched ? (
-        <Card style={{ marginTop: space.md }}>
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
-          <Label dim style={{ marginTop: 4 }}>
-            Da {euro(cfg?.priceBase ?? 3.9)}, una volta sola, ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
-            amici.
-          </Label>
-          <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
-            ⏳ Solo fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}: dopo non si potrà più diventare fondatori.
-          </Label>
-          <Button title="Diventa fondatore" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
-        </Card>
-      ) : null}
-
-      <InviteCard cfg={cfg} count={invites} paid={!!founder && founder.tier !== 'amici' && founder.tier !== 'tester'} />
+      {/* due modi per avere ParkingCT gratis per sempre */}
+      {!founder || founder.tier === 'tester' ? (
+        <FounderWays cfg={cfg} now={now} count={invites} launched={launched} go={go} />
+      ) : (
+        <InviteCard cfg={cfg} count={invites} paid={founder.tier !== 'amici'} />
+      )}
 
       <Pressable onPress={() => go('wall')} style={{ marginTop: space.md }}>
         <Card>
@@ -1153,6 +1129,119 @@ function HonorBanner({ done }: { done: boolean }) {
         {done ? 'Sei Fondatore onorario' : 'Diventi Fondatore onorario'}
       </Text>
     </View>
+  );
+}
+
+/** Un unico riquadro: due strade per diventare Fondatore e avere ParkingCT gratis per sempre */
+function FounderWays({
+  cfg,
+  now,
+  count,
+  launched,
+  go,
+}: {
+  cfg: PublicConfig | null;
+  now: number;
+  count: number | null;
+  launched: boolean;
+  go: (s: Screen) => void;
+}) {
+  const c = usePalette();
+  const [code, setCode] = useState('');
+  useEffect(() => {
+    void myInviteCode().then(setCode);
+  }, []);
+  const goal = cfg?.inviteFreeAt ?? 10;
+  const n = Math.min(count ?? 0, goal);
+  const daysLeft = cfg ? Math.max(0, Math.ceil((cfg.launchAt - now) / 86_400_000)) : null;
+  const msg = inviteMessage(cfg, code);
+  const whatsapp = async () => {
+    try {
+      await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
+    } catch {
+      await Share.share({ message: msg });
+    }
+  };
+  const col = { flex: 1, backgroundColor: c.cardAlt, borderRadius: 16, padding: 12 } as const;
+  return (
+    <Card style={{ marginTop: space.md, borderColor: '#D4A017', borderWidth: 2 }}>
+      {/* intestazione dorata */}
+      <View style={{ alignItems: 'center' }}>
+        <Text style={{ fontSize: 40 }}>🏆</Text>
+        <Text style={{ color: '#B8860B', fontSize: 28, fontWeight: '900', letterSpacing: 2 }}>FONDATORE</Text>
+        <View style={{ marginTop: 6, backgroundColor: '#2E7D32', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 5 }}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '900', letterSpacing: 1 }}>
+            ParkingCT GRATIS PER SEMPRE
+          </Text>
+        </View>
+        <Label bold size={15} style={{ marginTop: space.sm }}>
+          Hai due modi per diventarlo:
+        </Label>
+      </View>
+
+      {/* tabella a due colonne */}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: space.sm }}>
+        {!launched ? (
+          <View style={col}>
+            <Text style={{ fontSize: 26, textAlign: 'center' }}>💳</Text>
+            <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', textAlign: 'center', marginTop: 2 }}>Paghi una volta</Text>
+            <Text style={{ color: RED, fontSize: 22, fontWeight: '900', textAlign: 'center', marginTop: 6 }}>{euro(cfg?.priceBase ?? 3.9)}</Text>
+            <Label dim size={12} style={{ textAlign: 'center' }}>
+              una tantum
+            </Label>
+            <Label size={12} bold color={RED} style={{ textAlign: 'center', marginTop: 6 }}>
+              ⏳ solo fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}
+              {daysLeft !== null ? `\n(mancano ${daysLeft} giorni)` : ''}
+            </Label>
+            <View style={{ flex: 1 }} />
+            <Button small title="Paga ora" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
+          </View>
+        ) : null}
+        <View style={col}>
+          <Text style={{ fontSize: 26, textAlign: 'center' }}>🤝</Text>
+          <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', textAlign: 'center', marginTop: 2 }}>Inviti {goal} amici</Text>
+          <Text style={{ color: '#2E7D32', fontSize: 22, fontWeight: '900', textAlign: 'center', marginTop: 6 }}>0 €</Text>
+          <Label dim size={12} style={{ textAlign: 'center' }}>
+            non paghi nulla
+          </Label>
+          {/* spunte: si riempiono da sole */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 5, marginTop: 8 }}>
+            {Array.from({ length: goal }, (_, i) => (
+              <View
+                key={i}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: i < n ? '#2E7D32' : c.card,
+                  borderWidth: i < n ? 0 : 1,
+                  borderColor: c.border,
+                }}
+              >
+                {i < n ? <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '900' }}>✓</Text> : null}
+              </View>
+            ))}
+          </View>
+          <Label size={12} bold style={{ textAlign: 'center', marginTop: 4 }}>
+            {count === null ? '…' : `${n}/${goal} amici`}
+          </Label>
+          <View style={{ flex: 1 }} />
+          <Button small title="Invita amici" style={{ marginTop: space.md, backgroundColor: '#25D366' }} onPress={() => void whatsapp()} />
+        </View>
+      </View>
+
+      {/* come funzionano gli inviti, in una riga */}
+      <Label dim size={13} style={{ marginTop: space.md, textAlign: 'center' }}>
+        L'amico installa ParkingCT e scrive il tuo codice <Label bold size={13}>{code || '……'}</Label>: la sua spunta verde compare qui da sola.
+      </Label>
+      <Pressable onPress={() => Share.share({ message: msg })} hitSlop={8} style={{ alignSelf: 'center', marginTop: 6, minHeight: 32, justifyContent: 'center' }}>
+        <Label size={13} color={c.textDim}>
+          Invita con SMS, Telegram, email ›
+        </Label>
+      </Pressable>
+    </Card>
   );
 }
 
