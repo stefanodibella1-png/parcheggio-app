@@ -85,6 +85,12 @@ interface Memory {
   lastActivityAny: ActivitySample | null;
   /** ultimo campione activity a piedi (WALKING/ON_FOOT/RUNNING) */
   lastWalkActT: number | null;
+  /** campioni activity IN_VEHICLE affidabili (istanti), ultimi 2 minuti */
+  vehActT: number[];
+  /** tutte le posizioni anche imprecise (Wi-Fi/celle, fino a DRIFT_FIX_MAX_ACC_M), ultimi 5 minuti */
+  coarse: LocationSample[];
+  /** ultima volta che un movimento è partito vicino all'auto (DEPARTURE_CANDIDATE) */
+  nearDepartT: number | null;
   /** arrivato vicino all'auto già in movimento su un veicolo (non a piedi) */
   arrivedInVehicle: boolean;
   steps: { t: number; steps: number }[]; // ultimi 20 s
@@ -187,6 +193,9 @@ export class DetectionEngine {
       lastValidActivity: null,
       lastActivityAny: null,
       lastWalkActT: null,
+      vehActT: [],
+      coarse: [],
+      nearDepartT: null,
       arrivedInVehicle: false,
       steps: [],
       hasMotion: false,
@@ -422,6 +431,10 @@ export class DetectionEngine {
     }
     m.lastFixAny = s;
     m.lastFixAnyKmh = kmh;
+    if (s.accuracy <= cfg.DRIFT_FIX_MAX_ACC_M) {
+      m.coarse.push(s);
+      while (m.coarse.length > 0 && s.t - m.coarse[0].t > 300_000) m.coarse.shift();
+    }
     if (!valid) return; // scartato: registrato nell'export ma non usato
 
     m.fixes.push(s);
@@ -524,6 +537,10 @@ export class DetectionEngine {
       if (!this.m.lastValidActivity || a.t >= this.m.lastValidActivity.t) {
         this.m.lastValidActivity = a;
       }
+    }
+    if (a.activity === 'IN_VEHICLE' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
+      this.m.vehActT.push(a.t);
+      if (this.m.vehActT.length > 200) this.m.vehActT.shift();
     }
     if (this.m.departure && a.activity === 'IN_VEHICLE' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       this.m.departure.sawVehicleActivity = true;
@@ -1034,23 +1051,79 @@ export class DetectionEngine {
         (d !== null && d > cfg.RESUME_DISTANCE && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX));
     if (startMoving || c.vehicleConfirmed) {
       m.departureCandidateSince = c.now;
+      m.nearDepartT = c.now;
       this.transition('DEPARTURE_CANDIDATE', `movimento dal parcheggio: ${c.kmh === null ? '?' : r1(c.kmh)} km/h, activity ${c.act?.activity ?? 'n/d'}`, c.now);
       this.evalDepartureCandidate(c);
     }
   }
 
+  /**
+   * Partenza riconosciuta anche senza velocità GPS: il movimento è iniziato vicino all'auto,
+   * il sistema dice IN_VEHICLE con continuità e la distanza dall'auto cresce a velocità da veicolo
+   * (posizioni Wi-Fi/celle con velocità 0, tablet 12/10).
+   */
+  private driftDeparture(c: Ctx): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    const s = m.session;
+    if (!s || m.nearDepartT === null || c.now - m.nearDepartT > cfg.DRIFT_WINDOW_S * 1000) return false;
+    // se nel frattempo il sistema ti ha visto camminare, potresti aver preso un altro mezzo (bus, passaggio)
+    if ((m.lastWalkActT ?? 0) >= m.nearDepartT - 30_000) return false;
+    const veh = m.vehActT.filter((t) => t <= c.now && c.now - t <= cfg.DRIFT_ACT_WINDOW_S * 1000).length;
+    if (veh < cfg.DRIFT_MIN_VEH_ACTS) return false;
+    if (m.lastValidActivity?.activity !== 'IN_VEHICLE') return false;
+    const spot = s.spot.pointFinal;
+    const fx = m.coarse.filter((f) => f.t <= c.now && c.now - f.t <= cfg.DRIFT_SPAN_S * 1000);
+    if (fx.length < 3) return false;
+    const first = fx[0];
+    const last = fx[fx.length - 1];
+    const dt = (last.t - first.t) / 1000;
+    if (dt < 60) return false;
+    const d0 = distanceM(spot, first);
+    const d1 = distanceM(spot, last);
+    const gain = d1 - d0;
+    const kmh = (gain / dt) * 3.6;
+    if (gain < cfg.DRIFT_MIN_GAIN_M || kmh < cfg.DRIFT_MIN_KMH) return false;
+    m.departureCandidateSince = m.nearDepartT;
+    this.startDeparture(c.now, m.motionStartFix, c.vScore);
+    if (m.departure) {
+      m.departure.maxKmh = Math.max(m.departure.maxKmh, kmh);
+      m.departure.sawVehicleActivity = true;
+    }
+    m.nearDepartT = null;
+    this.transition(
+      'VEHICLE_DEPARTED',
+      `partenza in auto senza velocità GPS: activity IN_VEHICLE (${veh} campioni) e ${Math.round(gain)} m in ${Math.round(dt)} s (~${Math.round(kmh)} km/h) dall'auto`,
+      c.now,
+    );
+    this.evalDeparted(c);
+    return true;
+  }
+
   private evalAway(c: Ctx): void {
     const cfg = this.cfg;
     const m = this.m;
+    if (this.driftDeparture(c)) return;
     const d = this.distanceFromSpot(c.now);
 
     if (c.vehicleConfirmed && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) {
       const start = m.motionStartFix;
-      const startD = start && m.session ? distanceM(m.session.spot.pointFinal, start) : null;
+      let startD = start && m.session ? distanceM(m.session.spot.pointFinal, start) : null;
       const radius = m.session?.gpsLostAtPark ? cfg.NO_GPS_DEPARTURE_RADIUS : cfg.DEPARTURE_START_RADIUS;
+      // Parcheggio sotterraneo (Etnapolis 12/10 ore 21:15): il punto salvato è l'ingresso della rampa,
+      // l'uscita è da un'altra parte e il primo fix in auto arriva a 650 m. Conta anche dove eri
+      // (a piedi, fermo) nei minuti prima di salire: se eri vicino all'auto, la partenza è tua.
+      if (m.session?.gpsLostAtPark && startD !== null && startD > radius) {
+        const spot = m.session.spot.pointFinal;
+        for (const fx of m.fixes) {
+          if (c.now - fx.t > 300_000 || (fx.speed !== null && fx.speed * 3.6 > cfg.WALKING_SPEED_MAX)) continue;
+          startD = Math.min(startD, distanceM(spot, fx));
+        }
+      }
       if (startD !== null && startD <= radius) {
         // tornato all'auto senza che lo vedessimo vicino (es. GPS assente)
         m.departureCandidateSince = c.now;
+        m.nearDepartT = c.now;
         this.transition('DEPARTURE_CANDIDATE', `veicolo partito a ${Math.round(startD)} m dal punto di parcheggio`, c.now);
         this.evalDepartureCandidate(c);
         return;
@@ -1072,6 +1145,22 @@ export class DetectionEngine {
 
     if (d !== null && d <= cfg.RETURN_RADIUS) {
       m.arrivedInVehicle = c.vehicleConfirmed || (c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX);
+      // Era già lì, fermo o a piedi, prima di muoversi in veicolo: non è un arrivo, è la partenza
+      // (tablet 12/10 ore 15:51, rimasto in auto: "arrivato in veicolo" e poi "sei sceso" a 685 m).
+      if (m.arrivedInVehicle && m.session) {
+        const spot = m.session.spot.pointFinal;
+        const wasHere = m.coarse.some(
+          (f) => c.now - f.t <= 120_000 && c.now - f.t >= 10_000 && distanceM(spot, f) <= Math.max(cfg.AWAY_DISTANCE, f.accuracy + cfg.RETURN_RADIUS) && (f.speed === null || f.speed * 3.6 <= cfg.WALKING_SPEED_MAX),
+        );
+        if (wasHere) {
+          m.arrivedInVehicle = false;
+          m.departureCandidateSince = c.now;
+          m.nearDepartT = c.now;
+          this.transition('DEPARTURE_CANDIDATE', `veicolo partito vicino all'auto (${d} m), dove eri già prima`, c.now);
+          this.evalDepartureCandidate(c);
+          return;
+        }
+      }
       this.transition('USER_RETURNING', `di nuovo vicino all'auto (${d} m)${m.arrivedInVehicle ? ', arrivato in veicolo' : ''}`, c.now);
       return;
     }
@@ -1096,6 +1185,7 @@ export class DetectionEngine {
   private evalDepartureCandidate(c: Ctx): void {
     const cfg = this.cfg;
     const m = this.m;
+    if (this.driftDeparture(c)) return;
     const since = m.departureCandidateSince ?? c.now;
     if (c.vehicleConfirmed && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) {
       this.startDeparture(c.now, m.motionStartFix, c.vScore);

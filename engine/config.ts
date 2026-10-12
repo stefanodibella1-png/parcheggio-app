@@ -87,6 +87,14 @@ export interface DetectionConfig {
   CARRYOVER_MAX_DIST_M: number;
   /** il parcheggio del test precedente si riprende solo se tra la fine di quel test e l'inizio del nuovo è passato poco (altrimenti l'auto può essersi mossa senza essere vista) */
   CARRYOVER_MAX_GAP_S: number;
+  /** partenza "a deriva": GPS senza velocità (solo Wi-Fi/celle) ma activity IN_VEHICLE e distanza che cresce */
+  DRIFT_WINDOW_S: number;
+  DRIFT_ACT_WINDOW_S: number;
+  DRIFT_MIN_VEH_ACTS: number;
+  DRIFT_SPAN_S: number;
+  DRIFT_MIN_GAIN_M: number;
+  DRIFT_MIN_KMH: number;
+  DRIFT_FIX_MAX_ACC_M: number;
   SIGNAL_RADIUS_M: number;
   /** sosta entro questa distanza da un distributore (OpenStreetMap) = rifornimento (m) */
   FUEL_RADIUS_M: number;
@@ -225,6 +233,15 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   LATE_INPUT_REBUILD_S: 20,
   CARRYOVER_MAX_DIST_M: 2000,
   CARRYOVER_MAX_GAP_S: 7200,
+  // tablet 12/10 ore 14:05: partito dal parcheggio a passo d'uomo, poi solo posizioni Wi-Fi con velocità 0
+  // per 2,5 km con activity IN_VEHICLE: la partenza non veniva mai riconosciuta
+  DRIFT_WINDOW_S: 900,
+  DRIFT_ACT_WINDOW_S: 90,
+  DRIFT_MIN_VEH_ACTS: 3,
+  DRIFT_SPAN_S: 240,
+  DRIFT_MIN_GAIN_M: 300,
+  DRIFT_MIN_KMH: 12,
+  DRIFT_FIX_MAX_ACC_M: 150,
   SIGNAL_RADIUS_M: 35,
   FUEL_RADIUS_M: 40,
   SIGNAL_MIN_PARKING_S: 300,
