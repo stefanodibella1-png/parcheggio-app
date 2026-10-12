@@ -68,6 +68,7 @@ import {
   type PublicConfig,
 } from './server.ts';
 import { ControlCenter } from './ControlCenter.tsx';
+import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
 
@@ -94,6 +95,10 @@ export function PublicApp() {
     }
     const launched = Date.now() >= conf.launchAt;
     host.setCommunityAllowed(launched);
+    // Tester: promemoria per diventare fondatore finché si può (solo prima del lancio)
+    const fi = await founderInfo();
+    if (fi?.tier === 'tester' && !launched) void scheduleFounderReminders(conf.launchAt, Date.now());
+    else void cancelFounderReminders();
     if (launched && (await kvGet('pc:launchParty').catch(() => null)) !== '1') {
       await kvSet('pc:launchParty', '1').catch(() => {});
       setParty('launch');
@@ -153,8 +158,11 @@ export function PublicApp() {
         founder={founder}
         onBack={() => setScreen('home')}
         onRedeemed={async () => {
-          setFounder(await founderInfo());
+          const fi = await founderInfo();
+          setFounder(fi);
           setParty('founder');
+          if (fi?.tier !== 'tester') void cancelFounderReminders();
+          else void refreshCfg();
           // resta sulla pagina Fondatori: lì sceglie se comparire nel muro
         }}
       />
@@ -506,6 +514,20 @@ function Home({
       {!launched ? <ComingSoon /> : null}
 
       {/* sostenitore */}
+      {founder?.tier === 'tester' && !launched && cfg ? (
+        <Card accent={RED} style={{ marginTop: space.md }}>
+          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>⭐ Diventa fondatore prima del {fmtLaunch(cfg.launchAt)}</Text>
+          <Label style={{ marginTop: 4 }}>
+            Con {euro(cfg.priceBase)} ParkingCT resta tua gratis per sempre, anche dopo i 3 mesi da Tester. Dal {fmtLaunch(cfg.launchAt)} non sarà più
+            possibile.
+          </Label>
+          <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
+            ⏳ Mancano {Math.max(0, Math.ceil((cfg.launchAt - now) / 86_400_000))} giorni
+          </Label>
+          <Button title={`Diventa fondatore · ${euro(cfg.priceBase)}`} style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
+        </Card>
+      ) : null}
+
       {!founder && !launched ? (
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>

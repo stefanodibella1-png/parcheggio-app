@@ -213,3 +213,54 @@ export async function notifyWarning(title: string, body: string, id = 'warning')
     // ignorato
   }
 }
+
+// ---------------------------------------------------------------------------------------
+// ParkingCT: promemoria ai Tester per diventare fondatori prima del lancio
+
+const FOUNDER_REMINDER_PREFIX = 'founder-reminder-';
+
+/**
+ * Pianifica i promemoria "diventa fondatore" fino al giorno del lancio: uno a settimana
+ * e poi a 7, 3 e 1 giorno dal lancio, sempre alle 10:00. Rifà la lista ogni volta (niente doppioni).
+ */
+export async function scheduleFounderReminders(launchAt: number, now: number): Promise<void> {
+  await cancelFounderReminders();
+  if (launchAt <= now) return;
+  const at10 = (t: number) => {
+    const d = new Date(t);
+    d.setHours(10, 0, 0, 0);
+    return d.getTime();
+  };
+  const days = Math.floor((launchAt - now) / 86_400_000);
+  const when = new Set<number>();
+  for (let k = 7; k < days; k += 7) when.add(at10(now + k * 86_400_000));
+  for (const before of [7, 3, 1]) when.add(at10(launchAt - before * 86_400_000));
+  const date = new Date(launchAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+  let i = 0;
+  for (const t of [...when].sort((a, b) => a - b)) {
+    if (t <= now + 3600_000 || t >= launchAt) continue;
+    const left = Math.max(1, Math.ceil((launchAt - t) / 86_400_000));
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${FOUNDER_REMINDER_PREFIX}${i++}`,
+        content: {
+          title: left <= 1 ? '⭐ Ultimo giorno per diventare fondatore' : `⭐ Ancora ${left} giorni per diventare fondatore`,
+          body: `Fino al ${date} puoi avere ParkingCT gratis per sempre con 3,90 €. Dopo non sarà più possibile.`,
+          data: { kind: 'founder-reminder' },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(t), ...(Platform.OS === 'android' ? { channelId: 'events' } : {}) },
+      });
+    } catch {
+      // permesso negato: nessun promemoria
+    }
+  }
+}
+
+export async function cancelFounderReminders(): Promise<void> {
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of all) if (n.identifier.startsWith(FOUNDER_REMINDER_PREFIX)) await Notifications.cancelScheduledNotificationAsync(n.identifier);
+  } catch {
+    // ignorato
+  }
+}
