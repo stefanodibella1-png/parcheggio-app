@@ -31,10 +31,20 @@ function optionsFor(mode: LocationMode, body: string): Location.LocationTaskOpti
   if (mode === 'high') {
     return { ...base, accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0, activityType: Location.ActivityType.AutomotiveNavigation };
   }
+  // Android: niente filtro di distanza. Con il filtro, da fermi non arriva nessuna posizione,
+  // il telefono (HyperOS) considera l'app inattiva e la congela: poi il GPS non riparte
+  // nemmeno quando si risale in auto (test 11/10 19:27, 12/10 13:21).
+  const android = Platform.OS === 'android';
   if (mode === 'parked') {
-    return { ...base, accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 2, activityType: Location.ActivityType.Other };
+    return { ...base, accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: android ? 0 : 2, activityType: Location.ActivityType.Other };
   }
-  return { ...base, accuracy: Location.Accuracy.Balanced, timeInterval: 10000, distanceInterval: 15, activityType: Location.ActivityType.Fitness };
+  return {
+    ...base,
+    accuracy: android ? Location.Accuracy.High : Location.Accuracy.Balanced,
+    timeInterval: android ? 5000 : 10000,
+    distanceInterval: android ? 0 : 15,
+    activityType: Location.ActivityType.Fitness,
+  };
 }
 
 export async function startLocation(mode: LocationMode, body: string): Promise<void> {

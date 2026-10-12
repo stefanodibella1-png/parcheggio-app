@@ -85,6 +85,8 @@ export interface DetectionConfig {
   LATE_INPUT_REBUILD_S: number;
   /** app: l'auto del test precedente si riprende solo se la prima posizione è entro questa distanza (m) */
   CARRYOVER_MAX_DIST_M: number;
+  /** il parcheggio del test precedente si riprende solo se tra la fine di quel test e l'inizio del nuovo è passato poco (altrimenti l'auto può essersi mossa senza essere vista) */
+  CARRYOVER_MAX_GAP_S: number;
   SIGNAL_RADIUS_M: number;
   /** sosta entro questa distanza da un distributore (OpenStreetMap) = rifornimento (m) */
   FUEL_RADIUS_M: number;
@@ -222,6 +224,7 @@ export const DEFAULT_CONFIG: DetectionConfig = {
 
   LATE_INPUT_REBUILD_S: 20,
   CARRYOVER_MAX_DIST_M: 2000,
+  CARRYOVER_MAX_GAP_S: 7200,
   SIGNAL_RADIUS_M: 35,
   FUEL_RADIUS_M: 40,
   SIGNAL_MIN_PARKING_S: 300,

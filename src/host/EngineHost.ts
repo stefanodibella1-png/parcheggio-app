@@ -287,6 +287,8 @@ class Host {
         .filter((s) => s.outcome === 'OPEN' && s.parkedT !== null)
         .sort((a, b) => (b.parkedT ?? 0) - (a.parkedT ?? 0))[0];
       if (!open || now - (open.parkedT ?? 0) > 48 * 3600_000) return;
+      // test fermo per ore: l'auto può essersi spostata senza che nessuno la vedesse (test 12/10 ore 13:19)
+      if (prev.stoppedAt !== null && now - prev.stoppedAt > this.state.config.CARRYOVER_MAX_GAP_S * 1000) return;
       // si decide alla prima posizione buona: se sei lontano, l'auto si è mossa senza che il test lo vedesse
       this.pendingCarry = {
         until: now + 120_000,
