@@ -1234,7 +1234,8 @@ function FounderWays({
 
       {/* come funzionano gli inviti, in una riga */}
       <Label dim size={13} style={{ marginTop: space.md, textAlign: 'center' }}>
-        L'amico installa ParkingCT e scrive il tuo codice <Label bold size={13}>{code || '……'}</Label>: la sua spunta verde compare qui da sola.
+        Tocca <Label bold size={13}>Invita amici</Label> e seleziona tutti i contatti che vuoi invitare: se installano ParkingCT con il tuo codice{' '}
+        <Label bold size={13}>{code || '……'}</Label>, ottieni la spunta verde in automatico.
       </Label>
       <Pressable onPress={() => Share.share({ message: msg })} hitSlop={8} style={{ alignSelf: 'center', marginTop: 6, minHeight: 32, justifyContent: 'center' }}>
         <Label size={13} color={c.textDim}>
