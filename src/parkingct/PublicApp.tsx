@@ -28,8 +28,8 @@ import { shortVersion, updateAvailable, updateNow } from '../services/updates.ts
 import { Button, Card, Label } from '../ui/components/basics.tsx';
 import { Checklist, CommunityCard, useHost, useNow } from '../ui/components/live.tsx';
 import { fmtDistance, fmtDuration, fmtTime } from '../ui/format.ts';
-import { space, usePalette } from '../ui/theme.ts';
-import type { ParkingSession } from '../../engine/types.ts';
+import { FAMILY_COLORS, familyOf, space, usePalette } from '../ui/theme.ts';
+import type { EngineSnapshot, EngineState, ParkingSession } from '../../engine/types.ts';
 import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
@@ -486,22 +486,15 @@ function Home({
         />
       ) : null}
 
-      {/* auto */}
+      {/* stato in tempo reale (come in PARCHEGGIO) e auto */}
       <View style={{ marginTop: space.lg }}>
-        {driving ? (
-          <Card accent={RED}>
-            <Label size={13} dim bold>
-              IN AUTO
-            </Label>
-            <Text style={{ color: c.text, fontSize: 20, fontWeight: '700', marginTop: 4 }}>Buon viaggio!</Text>
-            <Label dim style={{ marginTop: 4 }}>
-              Quando parcheggi, ricordo io dove.
-            </Label>
-          </Card>
-        ) : session ? (
-          <CarHere session={session} distanceM={s.snapshot?.distanceFromParkingM ?? null} now={now} />
+        <LiveStatus snap={s.snapshot} active={s.active} lastFixT={s.rates.lastLocationT} now={now} />
+        {driving ? null : session ? (
+          <View style={{ marginTop: space.md }}>
+            <CarHere session={session} distanceM={s.snapshot?.distanceFromParkingM ?? null} now={now} />
+          </View>
         ) : (
-          <Card>
+          <Card style={{ marginTop: space.md }}>
             <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>Nessun parcheggio salvato</Text>
             <Label dim style={{ marginTop: 4 }}>
               Al prossimo parcheggio lo salvo da solo. Tieni il telefono con te, anche in tasca.
@@ -582,6 +575,113 @@ function TesterExpired({ cfg, go }: { cfg: PublicConfig | null; go: (s: Screen) 
       )}
       <Button title="Ho già un codice" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
     </ScrollView>
+  );
+}
+
+// --- stato in tempo reale: cosa sta rilevando ParkingCT adesso ---
+
+const LIVE_TEXT: Partial<Record<EngineState, { icon: string; label: string; hint: string }>> = {
+  UNKNOWN: { icon: '📡', label: 'In ascolto', hint: 'Rilevamento automatico attivo: non devi fare nulla.' },
+  LOW_CONFIDENCE: { icon: '📡', label: 'In ascolto', hint: 'Rilevamento automatico attivo: non devi fare nulla.' },
+  WALKING: { icon: '🚶', label: 'A piedi', hint: 'Quando sali in auto me ne accorgo da solo.' },
+  IN_VEHICLE: { icon: '🚗', label: 'In auto', hint: 'Quando parcheggi, ricordo io dove.' },
+  VEHICLE_MOVING: { icon: '🚗', label: 'In auto', hint: 'Quando parcheggi, ricordo io dove.' },
+  VEHICLE_STOPPED: { icon: '🚦', label: 'Auto ferma', hint: 'Semaforo o traffico? Se parcheggi, lo capisco da solo.' },
+  POSSIBLE_PARKING: { icon: '🅿️', label: 'Stai parcheggiando?', hint: 'Appena scendi a piedi salvo il posto.' },
+  PARKED: { icon: '🅿️', label: 'Parcheggiato', hint: 'Posto salvato.' },
+  PARKED_USER_AWAY: { icon: '🚶', label: "Sei lontano dall'auto", hint: 'Quando torni all\'auto avviso chi cerca posto qui vicino.' },
+  RETURN_PREDICTED: { icon: '↩️', label: "Stai tornando all'auto", hint: 'Il tuo posto sta per liberarsi: chi cerca lì vicino verrà avvisato.' },
+  USER_RETURNING: { icon: '🅿️', label: "Sei vicino all'auto", hint: 'Quando riparti, il posto passa a chi cerca.' },
+  DEPARTURE_CANDIDATE: { icon: '🚗', label: 'Stai ripartendo?', hint: 'Controllo che l\'auto si stia muovendo.' },
+  VEHICLE_DEPARTED: { icon: '✅', label: 'Ripartito: posto lasciato libero', hint: 'Grazie! Chi cerca lì vicino viene avvisato.' },
+};
+
+function LiveStatus({ snap, active, lastFixT, now }: { snap: EngineSnapshot | null; active: boolean; lastFixT: number | null; now: number }) {
+  const c = usePalette();
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  const state: EngineState = snap?.state ?? 'UNKNOWN';
+  const meta = LIVE_TEXT[state] ?? LIVE_TEXT.UNKNOWN!;
+  const color = FAMILY_COLORS[familyOf(state)];
+  const since = snap ? now - snap.stateSinceT : 0;
+  // un solo numero grande, come in PARCHEGGIO
+  let big = '';
+  let unit = '';
+  if ((state === 'IN_VEHICLE' || state === 'VEHICLE_MOVING' || state === 'DEPARTURE_CANDIDATE') && snap?.speedKmh != null) {
+    big = String(Math.round(snap.speedKmh));
+    unit = 'km/h';
+  } else if ((state === 'PARKED_USER_AWAY' || state === 'RETURN_PREDICTED') && snap?.distanceFromParkingM != null) {
+    big = fmtDistance(snap.distanceFromParkingM);
+    unit = "dall'auto";
+  } else if (state === 'VEHICLE_STOPPED' || state === 'POSSIBLE_PARKING') {
+    big = fmtDuration(since);
+    unit = 'fermo';
+  }
+  const fixAge = lastFixT !== null ? Math.max(0, Math.round((now - lastFixT) / 1000)) : null;
+  const gpsLine = !active
+    ? 'Rilevamento in avvio…'
+    : fixAge === null
+      ? 'In attesa del GPS…'
+      : fixAge < 60
+        ? 'GPS attivo'
+        : `GPS fermo da ${fmtDuration(fixAge * 1000)}`;
+  const gpsOk = active && fixAge !== null && fixAge < 60;
+  const eta = state === 'RETURN_PREDICTED' ? snap?.returnInfo?.releaseEtaS ?? null : null;
+  return (
+    <Card accent={color}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: `${color}22`, alignItems: 'center', justifyContent: 'center', marginRight: space.md }}>
+          <Text style={{ fontSize: 28 }}>{meta.icon}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: c.text, fontSize: 21, fontWeight: '800' }}>{meta.label}</Text>
+          <Label dim size={13}>
+            da {fmtDuration(since)}
+          </Label>
+        </View>
+        {big ? (
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ color, fontSize: 28, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{big}</Text>
+            <Label dim size={12}>
+              {unit}
+            </Label>
+          </View>
+        ) : null}
+      </View>
+      <Label dim size={14} style={{ marginTop: space.sm }}>
+        {eta !== null ? `Il tuo posto si libera tra circa ${Math.max(1, Math.round(eta / 60))} min. ` : ''}
+        {meta.hint}
+      </Label>
+      {snap?.searchingSinceT ? (
+        <Label size={14} style={{ marginTop: 4 }}>
+          🔎 Stai cercando parcheggio da {fmtDuration(now - snap.searchingSinceT)}
+        </Label>
+      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: space.sm }}>
+        <Animated.View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            marginRight: 6,
+            backgroundColor: gpsOk ? '#22C55E' : c.warn,
+            opacity: gpsOk ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) : 1,
+          }}
+        />
+        <Label dim size={12}>
+          {gpsLine} · rilevamento automatico
+        </Label>
+      </View>
+    </Card>
   );
 }
 
