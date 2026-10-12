@@ -154,6 +154,12 @@ export interface DetectionConfig {
   COMMUNITY_MIN_PARK_S: number;
   /** chi cerca e parcheggia entro questa distanza da un posto ricevuto lo conferma come vero (m) */
   COMMUNITY_TAKEN_RADIUS_M: number;
+  /** seconda voce per lo stesso posto quando ti avvicini sotto questa distanza (m): aggiorna lo stato */
+  COMMUNITY_SECOND_VOICE_M: number;
+  /** "non più disponibile" detto a voce solo se il posto sparito era entro questa distanza (m) */
+  COMMUNITY_GONE_VOICE_M: number;
+  /** ti stai avvicinando se la distanza è scesa di almeno tanto negli ultimi ~30 s (m) */
+  COMMUNITY_APPROACH_M: number;
 
   // --- pesi degli score ---
   W_VEHICLE: { speed: number; activity: number; motion: number };
@@ -276,6 +282,9 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   COMMUNITY_FREED_TTL_S: 300,
   COMMUNITY_MIN_PARK_S: 600,
   COMMUNITY_TAKEN_RADIUS_M: 20,
+  COMMUNITY_SECOND_VOICE_M: 300,
+  COMMUNITY_GONE_VOICE_M: 500,
+  COMMUNITY_APPROACH_M: 30,
 
   W_VEHICLE: { speed: 0.5, activity: 0.35, motion: 0.15 },
   W_WALKING: { speed: 0.3, activity: 0.45, steps: 0.25 },

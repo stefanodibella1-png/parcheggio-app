@@ -33,6 +33,8 @@ export class CommunityBridge {
   private lastSoonPush = 0;
   /** posti ricevuti di recente (per riconoscere quando chi cercava li ha davvero presi) */
   private received = new Map<string, { spot: NearbySpot; t: number }>();
+  /** guida vocale: quante voci per posto (max 2: alla ricezione e a 300 m) e distanze recenti */
+  private voiced = new Map<string, { n: number; spot: NearbySpot; dists: { t: number; d: number }[] }>();
 
   constructor(private cfg: () => DetectionConfig, private onChange: () => void) {}
 
@@ -169,9 +171,13 @@ export class CommunityBridge {
     const listening = this.testListen || now < this.listenUntil;
     if (listening !== this.state.listening) {
       this.state.listening = listening;
-      if (!listening) this.state.nearby = [];
+      if (!listening) {
+        this.state.nearby = [];
+        this.voiced.clear();
+      }
       this.onChange();
     }
+    if (listening && last) this.secondVoice(snap, last, now);
     if (!listening || !last || this.polling || now - this.lastPollT < cfg.COMMUNITY_POLL_S * 1000) return;
     this.lastPollT = now;
     this.polling = true;
@@ -186,26 +192,71 @@ export class CommunityBridge {
         this.state.nearby = list;
         this.state.lastSyncT = now;
         for (const s of list) this.received.set(s.id, { spot: s, t: now });
+        // posti annunciati a voce e poi spariti (ritirati, presi, scaduti) mentre ti avvicinavi
+        const ids = new Set(list.map((x) => x.id));
+        for (const [id, v] of this.voiced) {
+          if (ids.has(id) || v.n >= 2) continue;
+          const lastD = v.dists.length ? v.dists[v.dists.length - 1].d : v.spot.distanceM;
+          v.n = 2;
+          if (driving && lastD <= cfg.COMMUNITY_GONE_VOICE_M && (await getPref('voice'))) {
+            speak(`Il posto ${v.spot.address ? `in ${v.spot.address}` : 'che ti avevo segnalato'} non è più disponibile.`);
+          }
+        }
         // avvisa solo per i 2 posti più vicini, una volta (di nuovo se da "si libera" diventa "libero")
         const best = [...list].sort((a, b) => a.distanceM - b.distanceM).slice(0, 2);
         for (const s of best) {
           if (this.notified.get(s.id) === s.kind) continue;
           this.notified.set(s.id, s.kind);
           await notifyNearbySpot(s, now);
-          if (driving && (await getPref('voice'))) {
-            const where = s.address ? `in ${s.address}` : 'vicino a te';
-            const mins = Math.max(1, Math.round((s.freeAt - now) / 60000));
-            speak(
-              s.kind === 'FREED'
-                ? `Posto appena liberato ${where}, a ${s.distanceM} metri.`
-                : `Posto che si libera ${where} tra circa ${mins} minut${mins === 1 ? 'o' : 'i'}, a ${s.distanceM} metri.`,
-            );
-          }
+          // voce: la prima volta che il posto arriva (il cambio di stato lo dice la seconda voce a 300 m)
+          if (this.voiced.has(s.id)) continue;
+          const close = s.distanceM <= cfg.COMMUNITY_SECOND_VOICE_M;
+          this.voiced.set(s.id, { n: close ? 2 : 1, spot: s, dists: [{ t: now, d: s.distanceM }] });
+          if (driving && (await getPref('voice'))) speak(this.spotPhrase(s, s.distanceM, now));
+        }
+        // stato aggiornato dei posti già annunciati (per la seconda voce)
+        for (const s of list) {
+          const v = this.voiced.get(s.id);
+          if (v) v.spot = s;
         }
       })
       .finally(() => {
         this.polling = false;
         this.onChange();
       });
+  }
+
+  private spotPhrase(s: NearbySpot, d: number, now: number): string {
+    const where = s.address ? `in ${s.address}` : 'vicino a te';
+    const m = Math.round(d / 10) * 10;
+    if (s.kind === 'FREED') return `Posto appena liberato ${where}, a ${m} metri.`;
+    const mins = Math.max(1, Math.round((s.freeAt - now) / 60000));
+    return `Posto che si libera ${where} tra circa ${mins} minut${mins === 1 ? 'o' : 'i'}, a ${m} metri.`;
+  }
+
+  /** Seconda voce a 300 m, solo se ti stai avvicinando: dice com'è il posto adesso. */
+  private secondVoice(snap: EngineSnapshot, last: LocationSample, now: number): void {
+    const cfg = this.cfg();
+    const driving = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING'].includes(snap.state);
+    for (const [, v] of this.voiced) {
+      if (v.n !== 1) continue;
+      const d = Math.round(distanceM(last, v.spot));
+      v.dists.push({ t: now, d });
+      while (v.dists.length > 0 && now - v.dists[0].t > 30_000) v.dists.shift();
+      const approaching = v.dists.length > 1 && v.dists[0].d - d >= cfg.COMMUNITY_APPROACH_M;
+      if (d > cfg.COMMUNITY_SECOND_VOICE_M || !approaching || !driving) continue;
+      v.n = 2;
+      const s = v.spot;
+      void getPref('voice').then((on) => {
+        if (!on) return;
+        const where = s.address ? `in ${s.address}` : 'che ti avevo segnalato';
+        const m = Math.round(d / 10) * 10;
+        if (s.kind === 'FREED') speak(`Il posto ${where} è libero, a ${m} metri.`);
+        else {
+          const mins = Math.round((s.freeAt - now) / 60000);
+          speak(mins <= 0 ? `Il posto ${where} si sta liberando ora, a ${m} metri.` : `Il posto ${where} si libera tra ${mins === 1 ? 'un minuto' : `${mins} minuti`}, a ${m} metri.`);
+        }
+      });
+    }
   }
 }
