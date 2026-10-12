@@ -1227,9 +1227,10 @@ function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: num
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>🤝 Invita {goal} amici</Text>
-          <Text style={{ color: '#B8860B', fontSize: 15, fontWeight: '800', marginTop: 2 }}>
-            {paid ? '🏆 e diventi Fondatore onorario' : '🏆 e ParkingCT è gratis per sempre'}
+          <Text style={{ color: c.textDim, fontSize: 14, marginTop: 2 }}>
+            {paid ? 'Il titolo più alto, con 🤝 nel muro' : 'e ParkingCT è gratis per sempre'}
           </Text>
+          <HonorBanner done={done} />
         </View>
         <View style={{ alignItems: 'center', minWidth: 64 }}>
           <Text style={{ color: done ? '#2E7D32' : c.text, fontSize: 28, fontWeight: '900' }}>
