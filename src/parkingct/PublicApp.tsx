@@ -506,12 +506,15 @@ function Home({
       {!launched ? <ComingSoon /> : null}
 
       {/* sostenitore */}
-      {!founder ? (
+      {!founder && !launched ? (
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
             Da {euro(cfg?.priceBase ?? 3.9)} ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
             amici.
+          </Label>
+          <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
+            ⏳ Solo fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}: dopo non si potrà più diventare fondatori.
           </Label>
           <Button title="Diventa fondatore" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
         </Card>
@@ -537,17 +540,27 @@ function Home({
 }
 
 /** fine del periodo Tester: l'app si blocca e chiede di continuare come Fondatore */
+function fmtLaunch(t: number): string {
+  const d = new Date(t);
+  return `${d.getDate()}${d.getDate() === 1 ? '°' : ''} ${d.toLocaleDateString('it-IT', { month: 'long' })}`;
+}
+
 function TesterExpired({ cfg, go }: { cfg: PublicConfig | null; go: (s: Screen) => void }) {
   const c = usePalette();
+  const founderOpen = !cfg || Date.now() < cfg.launchAt;
   return (
     <ScrollView contentContainerStyle={{ padding: space.xl, flexGrow: 1, justifyContent: 'center' }}>
       <Text style={{ fontSize: 64, textAlign: 'center' }}>🧪</Text>
       <Text style={{ color: c.text, fontSize: 26, fontWeight: '800', textAlign: 'center', marginTop: space.md }}>Grazie, Tester!</Text>
       <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm, lineHeight: 23 }}>
-        Il tuo periodo di prova di {Math.round((cfg?.testerDays ?? 90) / 30)} mesi è finito. Il tuo aiuto è stato prezioso. Per continuare a usare
-        ParkingCT diventa Fondatore: per te resta gratis per sempre.
+        Il tuo periodo di prova di {Math.round((cfg?.testerDays ?? 90) / 30)} mesi è finito. Il tuo aiuto è stato prezioso.
+        {founderOpen
+          ? ' Per continuare a usare ParkingCT diventa Fondatore: per te resta gratis per sempre.'
+          : ' Per continuare a usare ParkingCT serve un abbonamento: le condizioni arrivano a breve, ti avviseremo qui.'}
       </Label>
-      <Button title={`⭐ Diventa Fondatore · ${euro(cfg?.priceBase ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
+      {founderOpen ? (
+        <Button title={`⭐ Diventa Fondatore · ${euro(cfg?.priceBase ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
+      ) : null}
       <Button title="Ho già un codice" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
     </ScrollView>
   );
@@ -1269,6 +1282,8 @@ function FounderScreen({
   const support = () => void buy('oro');
   const gold = cfg?.giftsGold ?? 3;
   const plat = cfg?.giftsPlat ?? 7;
+  // dopo il lancio non si può più diventare fondatori (i codici già comprati restano validi)
+  const founderOpen = !cfg || Date.now() < cfg.launchAt;
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg }} keyboardShouldPersistTaps="handled">
       <Pressable onPress={onBack} hitSlop={12}>
@@ -1353,7 +1368,7 @@ function FounderScreen({
               ))}
             </Card>
           ) : null}
-          {founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester' ? (
+          {founderOpen && (founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester') ? (
             <Card style={{ marginTop: space.md }}>
               <Label bold>Vuoi regalarla anche ai tuoi amici?</Label>
               <Label dim size={14} style={{ marginTop: 4 }}>
@@ -1365,7 +1380,16 @@ function FounderScreen({
         </>
       ) : null}
 
-      {!founder || founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester' ? (
+      {!founderOpen ? (
+        <Card style={{ marginTop: space.lg }}>
+          <Label bold>Le iscrizioni dei fondatori sono chiuse</Label>
+          <Label dim size={14} style={{ marginTop: 4 }}>
+            Si poteva diventare fondatori fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}. Se hai già un codice, inseriscilo qui sotto: resta
+            valido per sempre.
+          </Label>
+        </Card>
+      ) : null}
+      {founderOpen && (!founder || founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester') ? (
         <>
           {!founder ? (
             <TierCard
@@ -1410,7 +1434,10 @@ function FounderScreen({
             ]}
             onPress={() => void buy('platino')}
           />
-          <Label dim size={13} style={{ marginTop: space.md, textAlign: 'center' }}>
+          <Label bold size={14} color={RED} style={{ marginTop: space.md, textAlign: 'center' }}>
+            ⏳ Si può diventare fondatori solo fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}.
+          </Label>
+          <Label dim size={13} style={{ marginTop: space.sm, textAlign: 'center' }}>
             Paghi in modo sicuro con Stripe (carta, Apple Pay, Google Pay). Il codice personale arriva qui nell'app entro pochi minuti e si attiva da
             solo: conservalo.
           </Label>

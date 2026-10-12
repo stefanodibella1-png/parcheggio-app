@@ -56,7 +56,14 @@ const links = (await stripe('GET', 'payment_links', { limit: 100 })).data;
 const linkTier = new Map(); // id link → livello (anche link vecchi disattivati)
 for (const l of links) if (l.metadata?.parkingct_tier) linkTier.set(l.id, l.metadata.parkingct_tier);
 const cfgFields = {};
+// dopo il lancio non si vendono più i livelli fondatore: link disattivati e tolti dall'app
+const launched = Date.now() >= Date.parse(cfgFile.launchAt);
 for (const t of TIERS) {
+  if (launched && ['base', 'oro', 'platino'].includes(t.tier)) {
+    for (const l of links) if (l.active && l.metadata?.parkingct_tier === t.tier) await stripe('POST', `payment_links/${l.id}`, { active: false });
+    cfgFields[t.field] = { stringValue: '' };
+    continue;
+  }
   const cents = Math.round(t.price * 100);
   let prod = products.find((p) => p.metadata?.parkingct_tier === t.tier && p.active);
   if (!prod) prod = await stripe('POST', 'products', { name: t.name, metadata: { parkingct_tier: t.tier } });
