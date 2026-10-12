@@ -245,7 +245,7 @@ export async function scheduleFounderReminders(launchAt: number, now: number): P
         identifier: `${FOUNDER_REMINDER_PREFIX}${i++}`,
         content: {
           title: left <= 1 ? '⭐ Ultimo giorno per diventare fondatore' : `⭐ Ancora ${left} giorni per diventare fondatore`,
-          body: `Fino al ${date} puoi avere ParkingCT gratis per sempre con 3,90 €. Dopo non sarà più possibile.`,
+          body: `Fino al ${date} puoi avere ParkingCT per sempre con 3,90 €, una volta sola. Dopo non sarà più possibile.`,
           data: { kind: 'founder-reminder' },
         },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(t), ...(Platform.OS === 'android' ? { channelId: 'events' } : {}) },

@@ -518,7 +518,7 @@ function Home({
         <Card accent={RED} style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>⭐ Diventa fondatore prima del {fmtLaunch(cfg.launchAt)}</Text>
           <Label style={{ marginTop: 4 }}>
-            Con {euro(cfg.priceBase)} ParkingCT resta tua gratis per sempre, anche dopo i 3 mesi da Tester. Dal {fmtLaunch(cfg.launchAt)} non sarà più
+            Con {euro(cfg.priceBase)}, una volta sola, ParkingCT resta tua per sempre, anche dopo i 3 mesi da Tester. Dal {fmtLaunch(cfg.launchAt)} non sarà più
             possibile.
           </Label>
           <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
@@ -532,7 +532,7 @@ function Home({
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
-            Da {euro(cfg?.priceBase ?? 3.9)} ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
+            Da {euro(cfg?.priceBase ?? 3.9)}, una volta sola, ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
             amici.
           </Label>
           <Label bold size={14} color={RED} style={{ marginTop: 6 }}>
@@ -578,7 +578,7 @@ function TesterExpired({ cfg, go }: { cfg: PublicConfig | null; go: (s: Screen) 
         Il tuo periodo di prova di {Math.round((cfg?.testerDays ?? 90) / 30)} mesi è finito. Il tuo aiuto è stato prezioso.
         {founderOpen
           ? ' Per continuare a usare ParkingCT diventa Fondatore: per te resta gratis per sempre.'
-          : ` Per continuare a usare ParkingCT: ${euro(cfg?.continuePrice ?? 3.9)}.`}
+          : ` Per continuare a usare ParkingCT: ${euro(cfg?.continuePrice ?? 3.9)}, una tantum (paghi una volta sola).`}
       </Label>
       {founderOpen ? (
         <Button title={`⭐ Diventa Fondatore · ${euro(cfg?.priceBase ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
@@ -1239,7 +1239,10 @@ function TierCard({
       <Card style={{ marginTop: space.md, borderColor: highlight ? RED : c.border, borderWidth: highlight ? 2 : 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>{title}</Text>
-          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>{priceLabel ?? euro(price)}</Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>{priceLabel ?? euro(price)}</Text>
+            <Text style={{ color: c.textDim, fontSize: 12, fontWeight: '700' }}>una tantum</Text>
+          </View>
         </View>
         {highlight ? (
           <Label size={12} bold color={RED}>
@@ -1492,8 +1495,8 @@ function FounderScreen({
             ⏳ Si può diventare fondatori solo fino al {cfg ? fmtLaunch(cfg.launchAt) : '1° dicembre'}.
           </Label>
           <Label dim size={13} style={{ marginTop: space.sm, textAlign: 'center' }}>
-            Paghi in modo sicuro con Stripe (carta, Apple Pay, Google Pay). Il codice personale arriva qui nell'app entro pochi minuti e si attiva da
-            solo: conservalo.
+            Tutti i pagamenti sono una tantum: paghi una volta sola, nessun abbonamento e nessun rinnovo automatico. Paghi in modo sicuro con Stripe
+            (carta, Apple Pay, Google Pay). Il codice personale arriva qui nell'app entro pochi minuti e si attiva da solo: conservalo.
           </Label>
         </>
       ) : null}
