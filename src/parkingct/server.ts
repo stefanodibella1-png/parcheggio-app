@@ -28,6 +28,9 @@ export interface PublicConfig {
   linkGold: string;
   linkPlat: string;
   linkTester: string;
+  /** pagamento per continuare dopo la fine del periodo Tester (dopo il lancio) */
+  linkContinue: string;
+  continuePrice: number;
   /** Tester: giorni di uso completo dall'attivazione, e offerta minima in € */
   testerDays: number;
   testerMin: number;
@@ -51,6 +54,8 @@ const DEFAULT_CONFIG: PublicConfig = {
   linkGold: '',
   linkPlat: '',
   linkTester: '',
+  linkContinue: '',
+  continuePrice: 3.9,
   testerDays: 90,
   testerMin: 1,
 };
@@ -110,6 +115,8 @@ export async function getConfig(): Promise<PublicConfig> {
         linkGold: str(f.linkGold) ?? '',
         linkPlat: str(f.linkPlat) ?? '',
         linkTester: str(f.linkTester) ?? '',
+        linkContinue: str(f.linkContinue) ?? '',
+        continuePrice: num(f.continuePrice) ?? DEFAULT_CONFIG.continuePrice,
         testerDays: num(f.testerDays) ?? DEFAULT_CONFIG.testerDays,
         testerMin: num(f.testerMin) ?? DEFAULT_CONFIG.testerMin,
       };
@@ -161,7 +168,7 @@ export async function registerDevice(lat: number, lon: number, founder: boolean,
 // ---------------------------------------------------------------------------------------
 // sostenitori fondatori
 
-export type Tier = 'base' | 'oro' | 'platino' | 'regalo' | 'amici' | 'tester';
+export type Tier = 'base' | 'oro' | 'platino' | 'regalo' | 'amici' | 'tester' | 'continua';
 
 export const TIER_LABEL: Record<Tier, string> = {
   base: 'Sostenitore fondatore',
@@ -170,6 +177,7 @@ export const TIER_LABEL: Record<Tier, string> = {
   regalo: 'Fondatore (regalo di un amico)',
   amici: 'Fondatore ad honorem',
   tester: 'Tester',
+  continua: 'Utente ParkingCT',
 };
 
 export interface FounderInfo {
@@ -476,8 +484,8 @@ export function wallShows(w: WallEntry): boolean {
   return checkName(w.name) === 'ok';
 }
 
-export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4, tester: 5 };
-export const TIER_BADGE: Record<Tier, string> = { platino: '💎', oro: '🥇', base: '⭐', regalo: '🎁', amici: '🤝', tester: '🧪' };
+export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4, tester: 5, continua: 6 };
+export const TIER_BADGE: Record<Tier, string> = { platino: '💎', oro: '🥇', base: '⭐', regalo: '🎁', amici: '🤝', tester: '🧪', continua: '🚗' };
 
 async function wallId(f: FounderInfo): Promise<string> {
   if (f.tier === 'amici') return `inv-${await myInviteCode()}`;
@@ -602,7 +610,15 @@ export interface Pending {
 
 export function payLink(cfg: PublicConfig | null, tier: Tier): string {
   if (!cfg) return '';
-  return tier === 'oro' ? cfg.linkGold : tier === 'platino' ? cfg.linkPlat : tier === 'tester' ? cfg.linkTester : cfg.linkBase;
+  return tier === 'oro'
+    ? cfg.linkGold
+    : tier === 'platino'
+      ? cfg.linkPlat
+      : tier === 'tester'
+        ? cfg.linkTester
+        : tier === 'continua'
+          ? cfg.linkContinue
+          : cfg.linkBase;
 }
 
 /** Tester: millisecondi di uso rimasti (null se non è un tester) */

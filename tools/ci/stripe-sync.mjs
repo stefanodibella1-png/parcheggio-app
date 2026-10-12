@@ -17,6 +17,8 @@ const TIERS = [
   { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 7, field: 'linkPlat' },
   // offerta libera: l'importo lo sceglie chi paga; con la carta minimo testerMinCard (1,30 €), lo dice Stripe solo se si scrive meno
   { tier: 'tester', name: 'ParkingCT — Tester (offerta libera)', price: cfgFile.testerMinCard ?? 1.3, gifts: 0, field: 'linkTester', custom: true },
+  // Tester scaduto dopo il lancio: pagamento per continuare a usare l'app
+  { tier: 'continua', name: 'ParkingCT — Continua a usare ParkingCT', price: cfgFile.continuePrice ?? 3.9, gifts: 0, field: 'linkContinue' },
 ];
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
@@ -56,10 +58,10 @@ const links = (await stripe('GET', 'payment_links', { limit: 100 })).data;
 const linkTier = new Map(); // id link → livello (anche link vecchi disattivati)
 for (const l of links) if (l.metadata?.parkingct_tier) linkTier.set(l.id, l.metadata.parkingct_tier);
 const cfgFields = {};
-// dopo il lancio non si vendono più i livelli fondatore: link disattivati e tolti dall'app
+// dopo il lancio non si vendono più i livelli fondatore né l'offerta Tester: link disattivati e tolti dall'app
 const launched = Date.now() >= Date.parse(cfgFile.launchAt);
 for (const t of TIERS) {
-  if (launched && ['base', 'oro', 'platino'].includes(t.tier)) {
+  if (launched && ['base', 'oro', 'platino', 'tester'].includes(t.tier)) {
     for (const l of links) if (l.active && l.metadata?.parkingct_tier === t.tier) await stripe('POST', `payment_links/${l.id}`, { active: false });
     cfgFields[t.field] = { stringValue: '' };
     continue;

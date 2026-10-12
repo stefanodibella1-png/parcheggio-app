@@ -556,11 +556,13 @@ function TesterExpired({ cfg, go }: { cfg: PublicConfig | null; go: (s: Screen) 
         Il tuo periodo di prova di {Math.round((cfg?.testerDays ?? 90) / 30)} mesi è finito. Il tuo aiuto è stato prezioso.
         {founderOpen
           ? ' Per continuare a usare ParkingCT diventa Fondatore: per te resta gratis per sempre.'
-          : ' Per continuare a usare ParkingCT serve un abbonamento: le condizioni arrivano a breve, ti avviseremo qui.'}
+          : ` Per continuare a usare ParkingCT: ${euro(cfg?.continuePrice ?? 3.9)}.`}
       </Label>
       {founderOpen ? (
         <Button title={`⭐ Diventa Fondatore · ${euro(cfg?.priceBase ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
-      ) : null}
+      ) : (
+        <Button title={`Continua a usare ParkingCT · ${euro(cfg?.continuePrice ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
+      )}
       <Button title="Ho già un codice" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
     </ScrollView>
   );
@@ -1335,7 +1337,7 @@ function FounderScreen({
               />
             </Card>
           ) : null}
-          <WallChoice founder={founder} />
+          {founder.tier !== 'continua' ? <WallChoice founder={founder} /> : null}
           {founder.gifts.length ? (
             <Card style={{ marginTop: space.md }}>
               <Label bold>🎁 I tuoi codici regalo</Label>
@@ -1380,6 +1382,15 @@ function FounderScreen({
         </>
       ) : null}
 
+      {!founderOpen && founder?.tier === 'tester' && (testerLeftMs(founder, cfg, Date.now()) ?? 1) <= 0 ? (
+        <TierCard
+          title="Continua a usare ParkingCT"
+          price={cfg?.continuePrice ?? 3.9}
+          highlight
+          perks={['🚗 ParkingCT completa: dove hai parcheggiato e i posti che si liberano vicino a te']}
+          onPress={() => void buy('continua')}
+        />
+      ) : null}
       {!founderOpen ? (
         <Card style={{ marginTop: space.lg }}>
           <Label bold>Le iscrizioni dei fondatori sono chiuse</Label>

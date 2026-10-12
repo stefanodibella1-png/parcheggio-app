@@ -12,5 +12,6 @@
   "landingUrl": "",
   "testerDays": 90,
   "testerMin": 1,
-  "testerMinCard": 1.3
+  "testerMinCard": 1.3,
+  "continuePrice": 3.9
 }
