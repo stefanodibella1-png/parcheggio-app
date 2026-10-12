@@ -14,6 +14,7 @@ import { SummaryScreen } from './src/ui/screens/SummaryScreen.tsx';
 import { EventDetailScreen, ReviewScreen } from './src/ui/screens/ReviewScreens.tsx';
 import { IS_PUBLIC } from './src/variant.ts';
 import { PublicApp } from './src/parkingct/PublicApp.tsx';
+import { NewInstallPrompt } from './src/ui/components/NewInstallPrompt.tsx';
 
 const TABS: { name: TabName; label: string; icon: string }[] = [
   { name: 'test', label: 'Test', icon: '●' },
@@ -113,6 +114,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       {IS_PUBLIC ? <PublicApp /> : <Root />}
+      <NewInstallPrompt />
     </SafeAreaProvider>
   );
 }

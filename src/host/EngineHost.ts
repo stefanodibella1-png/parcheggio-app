@@ -32,8 +32,9 @@ import {
 } from '../sensors/location.ts';
 import { activityHistory, bufferedActivities, kickActivity, startActivity, stopActivity } from '../sensors/activity.ts';
 import { bufferedLocations, startLocationBackup, stopLocationBackup } from '../sensors/locationBackup.ts';
+import { newInstallAvailable } from '../services/appInstall.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
-import { inMinutes, notifyEvent, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
+import { inMinutes, notifyEvent, notifyNewInstall, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
 import { signalsForTile, tileKey } from '../services/osm.ts';
 import { deviceInfo } from '../services/deviceInfo.ts';
@@ -582,6 +583,21 @@ class Host {
     void kickActivity();
   }
 
+  private lastInstallCheckT = 0;
+
+  /** Ogni 6 ore: se è uscita una nuova APK (codice nativo cambiato) avvisa una volta con una notifica. */
+  private maybeCheckInstall(now: number): void {
+    if (Platform.OS !== 'android' || now - this.lastInstallCheckT < 6 * 3600_000) return;
+    this.lastInstallCheckT = now;
+    void (async () => {
+      const build = await newInstallAvailable();
+      if (build === null) return;
+      if ((await db.kvGet('install:notified').catch(() => null)) === String(build)) return;
+      await db.kvSet('install:notified', String(build)).catch(() => {});
+      await notifyNewInstall(build);
+    })();
+  }
+
   private async drainActivities(): Promise<void> {
     const list = await bufferedActivities();
     if (list.length === 0 || !this.state.active) return;
@@ -704,6 +720,7 @@ class Host {
     }
     this.maybeKickActivity(now);
     this.maybeRestartGps(now);
+    this.maybeCheckInstall(now);
     this.pump(now);
     this.updateRates(now);
     const track = this.state.track;

@@ -242,6 +242,23 @@ export async function notifyWarning(title: string, body: string, id = 'warning')
   }
 }
 
+/** Nuova installazione disponibile (vale per entrambe le app): toccando si apre l'app, che propone il download. */
+export async function notifyNewInstall(build: number): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'new-install',
+      content: {
+        title: `⬆️ Nuova versione di ${IS_PUBLIC ? 'ParkingCT' : 'PARCHEGGIO'}`,
+        body: 'Tocca per aggiornare: bastano due tocchi.',
+        data: { kind: 'newInstall', build, deliveredAt: Date.now() },
+      },
+      trigger: Platform.OS === 'android' ? { channelId: 'events' } : null,
+    });
+  } catch {
+    // ignorato
+  }
+}
+
 // ---------------------------------------------------------------------------------------
 // ParkingCT: promemoria ai Tester per diventare fondatori prima del lancio
 

@@ -28,6 +28,8 @@ jobs:
         variant: [lab, public]
     env:
       APP_VARIANT: ${{ matrix.variant }}
+      # numero della build dentro l'APK (versionCode): l'app lo confronta con l'ultima release
+      BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v5
 
@@ -103,6 +105,7 @@ jobs:
             cp android/app/build/outputs/apk/release/app-release.apk ParkingCT.apk
           else
             cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO-build-${{ github.run_number }}.apk
+            cp android/app/build/outputs/apk/release/app-release.apk PARCHEGGIO.apk
           fi
 
       - name: Pubblica la release
@@ -114,5 +117,6 @@ jobs:
           files: |
             *-build-${{ github.run_number }}.apk
             ParkingCT.apk
+            PARCHEGGIO.apk
           make_latest: true
           fail_on_unmatched_files: false
