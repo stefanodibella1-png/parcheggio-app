@@ -45,6 +45,13 @@ export class CommunityBridge {
     }
   }
 
+  /** telefono di prova (control center): ascolta sempre i posti vicini, non solo mentre cerchi parcheggio */
+  private testListen = false;
+
+  setTestListen(on: boolean): void {
+    this.testListen = on;
+  }
+
   async init(): Promise<void> {
     let id = await kvGet('community:deviceId').catch(() => null);
     if (!id) {
@@ -159,7 +166,7 @@ export class CommunityBridge {
     if (snap.searchingSinceT !== null) this.listenUntil = now + cfg.COMMUNITY_LINGER_S * 1000;
     // appena parcheggiato non serve più cercare
     if (snap.state === 'PARKED' || snap.state === 'PARKED_USER_AWAY') this.listenUntil = 0;
-    const listening = now < this.listenUntil;
+    const listening = this.testListen || now < this.listenUntil;
     if (listening !== this.state.listening) {
       this.state.listening = listening;
       if (!listening) this.state.nearby = [];

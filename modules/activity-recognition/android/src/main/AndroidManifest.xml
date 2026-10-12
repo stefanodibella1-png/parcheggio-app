@@ -7,6 +7,9 @@
     <receiver
       android:name="expo.modules.activityrecognition.ActivityReceiver"
       android:exported="false" />
+    <receiver
+      android:name="expo.modules.activityrecognition.LocationReceiver"
+      android:exported="false" />
     <!-- riaccensione automatica all'avvio del telefono e dopo un aggiornamento dell'app -->
     <receiver
       android:name="expo.modules.activityrecognition.BootReceiver"

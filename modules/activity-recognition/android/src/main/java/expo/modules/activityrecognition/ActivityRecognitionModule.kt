@@ -11,6 +11,9 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.ActivityRecognition
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -67,6 +70,19 @@ class ActivityRecognitionModule : Module() {
     AsyncFunction("getBuffered") {
       ActivityBus.drain()
     }
+
+    // Posizioni di riserva via PendingIntent: continuano anche se il telefono congela JS.
+    Function("startLocation") { intervalMs: Int ->
+      startLocation(intervalMs.toLong())
+    }
+
+    Function("stopLocation") {
+      stopLocation()
+    }
+
+    AsyncFunction("getBufferedLocations") {
+      LocationBus.drain()
+    }
   }
 
   private fun hasPermission(): Boolean {
@@ -98,7 +114,35 @@ class ActivityRecognitionModule : Module() {
     running = false
   }
 
+  private fun hasLocationPermission(): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+  private fun locationIntent(): PendingIntent {
+    val intent = Intent(context, LocationReceiver::class.java).setAction(LOC_ACTION)
+    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+    return PendingIntent.getBroadcast(context, LOC_REQUEST_CODE, intent, flags)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun startLocation(intervalMs: Long) {
+    if (!hasLocationPermission()) return
+    val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+      .setMinUpdateIntervalMillis(intervalMs / 2)
+      .setMinUpdateDistanceMeters(0f)
+      .setMaxUpdateDelayMillis(0)
+      .build()
+    // la stessa PendingIntent sostituisce la richiesta precedente: niente doppioni
+    LocationServices.getFusedLocationProviderClient(context).requestLocationUpdates(req, locationIntent())
+  }
+
+  private fun stopLocation() {
+    LocationServices.getFusedLocationProviderClient(context).removeLocationUpdates(locationIntent())
+  }
+
   companion object {
+    private const val LOC_ACTION = "expo.modules.activityrecognition.LOCATION_UPDATE"
+    private const val LOC_REQUEST_CODE = 4712
     private const val ACTION = "expo.modules.activityrecognition.ACTIVITY_UPDATE"
     private const val REQUEST_CODE = 4711
   }

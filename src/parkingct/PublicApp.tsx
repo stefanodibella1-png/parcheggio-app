@@ -97,7 +97,9 @@ export function PublicApp() {
       Alert.alert('Codice attivo su un altro telefono', 'Il tuo codice ParkingCT è stato inserito su un altro telefono. Per usarlo di nuovo qui, inseriscilo nella pagina Fondatori.');
     }
     const launched = Date.now() >= conf.launchAt;
-    host.setCommunityAllowed(launched);
+    // telefono di prova (control center › ⚙︎): posti attivi già prima del lancio
+    const early = (await kvGet('pc:earlyCommunity').catch(() => null)) === '1';
+    host.setCommunityAllowed(launched || early, early && !launched);
     // Tester: promemoria per diventare fondatore finché si può (solo prima del lancio)
     const fi = await founderInfo();
     if (fi?.tier === 'tester' && !launched) void scheduleFounderReminders(conf.launchAt, Date.now());

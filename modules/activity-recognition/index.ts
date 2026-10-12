@@ -23,6 +23,20 @@ type NativeModuleShape = {
   queryHistory(fromMs: number, toMs: number): Promise<NativeActivity[]>;
   getBuffered(): Promise<NativeActivity[]>;
   addListener(event: 'onActivity', cb: (a: NativeActivity) => void): Subscription;
+  // solo Android
+  startLocation?(intervalMs: number): void;
+  stopLocation?(): void;
+  getBufferedLocations?(): Promise<NativeLocation[]>;
+};
+
+export type NativeLocation = {
+  t: number;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed: number; // -1 = sconosciuta
+  heading: number; // -1 = sconosciuta
+  altitude: number; // -99999 = sconosciuta
 };
 
 const Native = requireOptionalNativeModule<NativeModuleShape>('ActivityRecognition');
@@ -49,6 +63,17 @@ export const ActivityRecognition = {
   },
   async getBuffered(): Promise<NativeActivity[]> {
     return Native ? Native.getBuffered() : [];
+  },
+  /** Android: posizioni di riserva via PendingIntent (sopravvivono al congelamento dell'app). */
+  locationBackupPresent: typeof Native?.startLocation === 'function',
+  startLocation(intervalMs: number): void {
+    if (typeof Native?.startLocation === 'function') Native.startLocation(intervalMs);
+  },
+  stopLocation(): void {
+    if (typeof Native?.stopLocation === 'function') Native.stopLocation();
+  },
+  async getBufferedLocations(): Promise<NativeLocation[]> {
+    return typeof Native?.getBufferedLocations === 'function' ? Native.getBufferedLocations() : [];
   },
   addListener(cb: (a: NativeActivity) => void): Subscription {
     return Native ? Native.addListener('onActivity', cb) : { remove() {} };

@@ -31,6 +31,7 @@ import {
   type LocationMode,
 } from '../sensors/location.ts';
 import { activityHistory, bufferedActivities, kickActivity, startActivity, stopActivity } from '../sensors/activity.ts';
+import { bufferedLocations, startLocationBackup, stopLocationBackup } from '../sensors/locationBackup.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
 import { inMinutes, notifyEvent, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
@@ -192,6 +193,7 @@ class Host {
     this.startTimers();
     if (AppState.currentState === 'active') this.startForegroundSensors();
     startActivity((a) => this.ingestActivity(a));
+    startLocationBackup();
     await this.applySideEffectsForState(this.engine.state);
   }
 
@@ -268,6 +270,7 @@ class Host {
     this.startTimers();
     this.startForegroundSensors();
     startActivity((a) => this.ingestActivity(a));
+    startLocationBackup();
     try {
       await startLocation('high', 'Rilevamento automatico attivo');
     } catch (e) {
@@ -317,6 +320,7 @@ class Host {
     this.stopTimers();
     stopMotion();
     stopActivity();
+    stopLocationBackup();
     await stopLocation().catch(() => {});
     await stopGeofences().catch(() => {});
 
@@ -357,8 +361,9 @@ class Host {
    * permette di riavviare i sensori) si chiude il registro e se ne apre uno nuovo: l'auto
    * parcheggiata passa al nuovo registro. I registri più vecchi di 7 giorni si cancellano.
    */
-  setCommunityAllowed(allowed: boolean): void {
+  setCommunityAllowed(allowed: boolean, testListen = false): void {
     this.community.setAllowed(allowed);
+    this.community.setTestListen(testListen);
   }
 
   async ensureAlwaysOn(): Promise<void> {
@@ -396,6 +401,7 @@ class Host {
           this.state.error = `Posizione non avviata all'accensione: ${String(e)}`;
         }
       }
+      startLocationBackup();
       return;
     }
     // ParkingCT: dopo il benvenuto è sempre attiva
@@ -409,8 +415,22 @@ class Host {
 
   // ---- ingresso dati ------------------------------------------------------------------
 
+  /** istanti (ms) delle posizioni già ricevute: GPS principale e riserva nativa ricevono la stessa posizione dal sistema */
+  private seenLocT = new Set<number>();
+  private seenLocOrder: number[] = [];
+
+  private isDuplicateLoc(t: number): boolean {
+    if (this.seenLocT.has(t)) return true;
+    this.seenLocT.add(t);
+    this.seenLocOrder.push(t);
+    if (this.seenLocOrder.length > 6000) this.seenLocT.delete(this.seenLocOrder.shift() as number);
+    return false;
+  }
+
   ingestLocations(samples: LocationSample[]): void {
     if (!this.state.active) return;
+    samples = samples.filter((x) => !this.isDuplicateLoc(x.t));
+    if (samples.length === 0) return;
     const now = Date.now();
     for (const s of samples) {
       this.counts.location.push(now);
@@ -442,6 +462,7 @@ class Host {
     if (Platform.OS === 'android' && now - this.lastActDrainT > 5000) {
       this.lastActDrainT = now;
       void this.drainActivities();
+      void this.drainLocations();
     }
     const last = samples[samples.length - 1];
     if (last) void this.loadSignals(last.latitude, last.longitude, now);
@@ -573,6 +594,12 @@ class Host {
     this.pump(t);
   }
 
+  /** Posizioni arrivate dal canale nativo di riserva (anche mentre il telefono teneva l'app congelata). */
+  private async drainLocations(): Promise<void> {
+    const list = await bufferedLocations();
+    if (list.length > 0) this.ingestLocations(list);
+  }
+
   /** Recupera le attività registrate dal sistema mentre l'app era sospesa. */
   async catchUpActivities(): Promise<void> {
     if (!this.state.active) return;
@@ -673,6 +700,7 @@ class Host {
     if (Platform.OS === 'android' && now - this.lastActDrainT > 5000) {
       this.lastActDrainT = now;
       void this.drainActivities();
+      void this.drainLocations();
     }
     this.maybeKickActivity(now);
     this.maybeRestartGps(now);

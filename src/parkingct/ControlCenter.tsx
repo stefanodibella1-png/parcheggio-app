@@ -23,6 +23,8 @@ import {
   type Stats,
 } from './admin.ts';
 import { checkName } from './moderation.ts';
+import { host } from '../host/EngineHost.ts';
+import { kvGet, kvSet } from '../storage/db.ts';
 import { APK_URL, TIER_BADGE, euro, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
 
 const RED = '#E53935';
@@ -180,12 +182,44 @@ function Login({ onIn }: { onIn: () => void }) {
   );
 }
 
+/** Telefono di prova: vede e pubblica i posti già prima del 1° dicembre (solo su questo telefono). */
+function EarlyCommunity() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    void kvGet('pc:earlyCommunity')
+      .catch(() => null)
+      .then((v) => setOn(v === '1'));
+  }, []);
+  return (
+    <Card style={{ marginTop: space.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, paddingRight: space.sm }}>
+          <Label bold>Posti in anticipo su questo telefono</Label>
+          <Label dim size={13}>
+            Per le prove prima del lancio: questo telefono pubblica i posti che lascia e riceve quelli liberati entro 800 m, in qualunque momento. Gli altri utenti non vedono nulla fino al 1° dicembre.
+          </Label>
+        </View>
+        <Switch
+          value={on}
+          onValueChange={async (v) => {
+            setOn(v);
+            await kvSet('pc:earlyCommunity', v ? '1' : '').catch(() => {});
+            host.setCommunityAllowed(v, v);
+          }}
+        />
+      </View>
+    </Card>
+  );
+}
+
 function Settings() {
   const [oldP, setOldP] = useState('');
   const [newP, setNewP] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   return (
+    <>
+    <EarlyCommunity />
     <Card style={{ marginTop: space.md }}>
       <Label bold>Cambia password</Label>
       <Field label="Password attuale" value={oldP} onChange={setOldP} secure />
@@ -204,6 +238,7 @@ function Settings() {
         }}
       />
     </Card>
+    </>
   );
 }
 
