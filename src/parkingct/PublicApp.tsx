@@ -390,6 +390,17 @@ function Home({
     })();
   }, [founder]);
 
+  // gli amici che installano compaiono da soli: si ricontrolla ogni minuto e quando l'app torna in primo piano
+  useEffect(() => {
+    const check = () => void myInviteCount().then((n) => n !== null && setInvites(n));
+    const id = setInterval(check, 60_000);
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && check());
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, []);
+
   // parcheggi ricordati da questo telefono (i test vecchi si cancellano: si tiene un contatore)
   const sessionId = s.session?.parkingId ?? null;
   useEffect(() => {
@@ -1145,75 +1156,114 @@ function HonorBanner({ done }: { done: boolean }) {
   );
 }
 
+function InviteDot({ i, ok, fresh }: { i: number; ok: boolean; fresh: boolean }) {
+  const c = usePalette();
+  const pop = useRef(new Animated.Value(fresh ? 0 : 1)).current;
+  useEffect(() => {
+    if (!fresh) return;
+    pop.setValue(0);
+    Animated.spring(pop, { toValue: 1, friction: 3, tension: 80, useNativeDriver: true }).start();
+  }, [fresh, pop]);
+  return (
+    <Animated.View
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: ok ? '#2E7D32' : c.cardAlt,
+        transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
+      }}
+    >
+      <Text style={{ color: ok ? '#FFFFFF' : c.textDim, fontSize: ok ? 14 : 11, fontWeight: '800' }}>{ok ? '✓' : i + 1}</Text>
+    </Animated.View>
+  );
+}
+
 function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: number | null; paid: boolean }) {
   const c = usePalette();
   const [code, setCode] = useState('');
+  const [seen, setSeen] = useState<number | null>(null);
   useEffect(() => {
     void myInviteCode().then(setCode);
+    void kvGet('pc:inviteSeen').then((v) => setSeen(Number(v ?? 0)));
   }, []);
   const goal = cfg?.inviteFreeAt ?? 10;
-  const n = count ?? 0;
-  const done = goal > 0 && n >= goal;
+  const n = Math.min(count ?? 0, goal);
+  const done = goal > 0 && (count ?? 0) >= goal;
+  // le nuove spunte "saltano" una volta
+  useEffect(() => {
+    if (count !== null && seen !== null && count > seen) {
+      const t = setTimeout(() => {
+        setSeen(count);
+        void kvSet('pc:inviteSeen', String(count)).catch(() => {});
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [count, seen]);
   const msg = inviteMessage(cfg, code);
   const whatsapp = async () => {
-    const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
     } catch {
       await Share.share({ message: msg });
     }
   };
+  const step = (num: string, text: string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+      <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: RED, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+        <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 12 }}>{num}</Text>
+      </View>
+      <Label size={14} style={{ flex: 1 }}>
+        {text}
+      </Label>
+    </View>
+  );
   return (
     <Card style={{ marginTop: space.md }}>
-      <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>
-        {paid ? `🤝 Invita ${goal} amici` : `🤝 Invita ${goal} amici: ParkingCT gratis per sempre`}
-      </Text>
-      <Label dim style={{ marginTop: 4 }}>
-        {paid
-          ? `Quando ${goal} amici installano ParkingCT con il tuo codice, accanto al tuo nome nel muro compare 🤝.`
-          : `Quando ${goal} amici installano ParkingCT con il tuo codice, per te è gratis per sempre: non paghi nulla.`}
-      </Label>
-      <HonorBanner done={done} />
-      {/* una spunta verde per ogni amico che ha installato l'app con il tuo codice */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: space.md, justifyContent: 'center' }}>
-        {Array.from({ length: Math.max(goal, 1) }, (_, i) => {
-          const ok = i < n;
-          return (
-            <View
-              key={i}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: ok ? '#2E7D32' : c.cardAlt,
-                borderWidth: ok ? 0 : 2,
-                borderColor: c.border,
-                borderStyle: ok ? 'solid' : 'dashed',
-              }}
-            >
-              <Text style={{ color: ok ? '#FFFFFF' : c.textDim, fontSize: ok ? 20 : 14, fontWeight: '800' }}>{ok ? '✓' : i + 1}</Text>
-            </View>
-          );
-        })}
+      {/* titolo e contatore */}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>🤝 Invita {goal} amici</Text>
+          <Text style={{ color: '#B8860B', fontSize: 15, fontWeight: '800', marginTop: 2 }}>
+            {paid ? '🏆 e diventi Fondatore onorario' : '🏆 e ParkingCT è gratis per sempre'}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'center', minWidth: 64 }}>
+          <Text style={{ color: done ? '#2E7D32' : c.text, fontSize: 28, fontWeight: '900' }}>
+            {count === null ? '–' : n}
+            <Text style={{ color: c.textDim, fontSize: 18 }}>/{goal}</Text>
+          </Text>
+        </View>
       </View>
-      <Label bold size={15} style={{ marginTop: space.sm, textAlign: 'center' }} color={done ? '#2E7D32' : undefined}>
-        {count === null ? '…' : done ? `🎉 ${n} amici: ce l'hai fatta!` : `${n} su ${goal} amici hanno installato ParkingCT`}
-      </Label>
-      <View style={{ alignItems: 'center', marginTop: space.md }}>
-        <Label size={13} dim>
-          Il tuo codice amico (lo inseriscono al primo avvio)
-        </Label>
-        <Text selectable style={{ color: c.text, fontSize: 26, fontWeight: '800', letterSpacing: 4 }}>
-          {code || '……'}
-        </Text>
+
+      {/* una spunta per amico, in una sola riga */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md }}>
+        {Array.from({ length: goal }, (_, i) => (
+          <InviteDot key={i} i={i} ok={i < n} fresh={i < n && seen !== null && i >= seen} />
+        ))}
       </View>
-      <Button title="📲 Invita su WhatsApp" style={{ marginTop: space.md, backgroundColor: '#25D366' }} onPress={() => void whatsapp()} />
       <Label dim size={13} style={{ marginTop: 6, textAlign: 'center' }}>
-        In WhatsApp puoi scegliere più contatti insieme: ricevono il link e il tuo codice.
+        {done ? '🎉 Fatto! Sei Fondatore onorario.' : 'Le spunte verdi compaiono da sole, appena un amico installa.'}
       </Label>
-      <Button small variant="ghost" title="Altri modi (SMS, Telegram, email…)" style={{ marginTop: space.sm }} onPress={() => Share.share({ message: msg })} />
+
+      {/* come funziona */}
+      {!done ? (
+        <View style={{ marginTop: space.md }}>
+          {step('1', 'Mandi l\'invito su WhatsApp a chi vuoi')}
+          {step('2', `L'amico installa ParkingCT e scrive il tuo codice ${code || '……'}`)}
+          {step('3', 'Qui compare la sua spunta ✓: non devi fare nulla')}
+        </View>
+      ) : null}
+
+      <Button title="Invita su WhatsApp" style={{ marginTop: space.md, backgroundColor: '#25D366' }} onPress={() => void whatsapp()} />
+      <Pressable onPress={() => Share.share({ message: msg })} hitSlop={8} style={{ alignSelf: 'center', marginTop: 10, minHeight: 32, justifyContent: 'center' }}>
+        <Label size={14} color={c.textDim}>
+          Altri modi: SMS, Telegram, email ›
+        </Label>
+      </Pressable>
     </Card>
   );
 }
