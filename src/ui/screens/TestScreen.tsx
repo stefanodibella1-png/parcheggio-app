@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, BackHandler, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { host } from '../../host/EngineHost.ts';
 import { readiness, type CheckItem } from '../../services/permissions.ts';
-import { updateAvailable, updateNow, updatePending } from '../../services/updates.ts';
+import { fmtWhen, latestPublished, updateAvailable, updateNow, updatePending } from '../../services/updates.ts';
 import { Button, Card, Label, SectionTitle, Title } from '../components/basics.tsx';
 import { CarCard, Checklist, CommunityCard, SensorLine, StateCard, Timeline, useHost, useNow } from '../components/live.tsx';
 import { SCENARIOS } from '../scenarios.ts';
@@ -20,6 +20,11 @@ export function TestScreen({ nav }: { nav: Nav }) {
   const [busy, setBusy] = useState(false);
   const [updAvail, setUpdAvail] = useState(false);
   const [updBusy, setUpdBusy] = useState(false);
+  const [pub, setPub] = useState<{ at: number; note: string } | null>(null);
+  const hasUpd = updAvail || updatePending();
+  useEffect(() => {
+    if (hasUpd) void latestPublished().then(setPub);
+  }, [hasUpd]);
 
   const refresh = useCallback(() => {
     readiness().then(setItems).catch(() => setItems([]));
@@ -108,7 +113,29 @@ export function TestScreen({ nav }: { nav: Nav }) {
         </View>
         {s.active && (updAvail || updatePending()) ? (
           <Card style={{ marginTop: space.md, borderColor: c.ok }}>
-            <Label color={c.ok}>Aggiornamento pronto: si installa da solo quando premi FERMA TEST.</Label>
+            <Label color={c.ok} bold>
+              Aggiornamento pronto{pub ? ` del ${fmtWhen(pub.at)}` : ''}
+            </Label>
+            {pub?.note ? (
+              <Label size={14} style={{ marginTop: 4 }}>
+                Novità: {pub.note}
+              </Label>
+            ) : null}
+            <Button
+              small
+              title={updBusy ? 'Installazione…' : 'Installa ora (il test continua)'}
+              style={{ marginTop: space.sm }}
+              disabled={updBusy}
+              onPress={async () => {
+                setUpdBusy(true);
+                await host.flush(true).catch(() => {}); // tutti i dati già nel registro: il test riprende da solo
+                const r = await updateNow();
+                if (r !== 'reloading') {
+                  setUpdBusy(false);
+                  setUpdAvail(false);
+                }
+              }}
+            />
           </Card>
         ) : null}
         {!s.active && (updAvail || updatePending()) ? (

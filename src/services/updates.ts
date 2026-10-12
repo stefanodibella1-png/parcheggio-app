@@ -91,6 +91,30 @@ export function releaseInfo(): { when: string; note: string; build: number } {
   return { when, note: Updates.updateId ? RELEASE.note : '', build: installedBuild() };
 }
 
+/**
+ * Data e nota dell'ultimo aggiornamento pubblicato (anche se non è ancora installato):
+ * si legge dall'ultima pubblicazione riuscita su GitHub Actions.
+ */
+export async function latestPublished(): Promise<{ at: number; note: string } | null> {
+  try {
+    const r = await fetch(
+      'https://api.github.com/repos/stefanodibella1-png/parcheggio-app/actions/workflows/update.yml/runs?status=success&per_page=1',
+      { headers: { Accept: 'application/vnd.github+json' } },
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { workflow_runs?: { updated_at: string; head_commit?: { message?: string } }[] };
+    const run = j.workflow_runs?.[0];
+    if (!run) return null;
+    return { at: Date.parse(run.updated_at), note: (run.head_commit?.message ?? '').split('\n')[0] };
+  } catch {
+    return null;
+  }
+}
+
+export function fmtWhen(t: number): string {
+  return new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 /** Codice breve della versione installata. */
 export function shortVersion(): string {
   return Updates.updateId ? Updates.updateId.slice(0, 8) : 'originale';
