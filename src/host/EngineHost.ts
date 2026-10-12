@@ -658,7 +658,10 @@ class Host {
     const pc = this.pendingCarry;
     if (!pc || !this.engine) return;
     if (now > pc.until) {
+      // nessuna posizione buona in tempo (al chiuso, garage, negozio): l'auto si considera dove era.
+      // Prima il parcheggio veniva scartato e la schermata diceva "Nessun parcheggio salvato".
       this.pendingCarry = null;
+      this.push({ ...pc.input, t: Math.max(pc.input.t, now) });
       return;
     }
     const good = samples.find((x) => x.accuracy <= 50);
@@ -721,6 +724,7 @@ class Host {
     this.maybeKickActivity(now);
     this.maybeRestartGps(now);
     this.maybeCheckInstall(now);
+    this.resolveCarry([], now);
     this.pump(now);
     this.updateRates(now);
     const track = this.state.track;
