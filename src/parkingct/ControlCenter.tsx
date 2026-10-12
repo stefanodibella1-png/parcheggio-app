@@ -69,6 +69,7 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
                 ['codici', 'Codici'],
                 ['pubblicita', 'Pubbl.'],
                 ['muro', 'Muro'],
+                ['impostazioni', '⚙︎'],
               ] as [Tab, string][]
             ).map(([k, t]) => (
               <Pressable
