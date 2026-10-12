@@ -45,11 +45,11 @@ function token(): Write {
 
 export type LoginResult = { ok: true } | { ok: false; msg: string };
 
-/** Entra con la password. Se non è mai stata scelta, la prima password inserita diventa quella admin. */
+/** Entra con la password. Se non è mai stata scelta, la prima password inserita diventa quella del control center. */
 export async function login(password: string): Promise<LoginResult> {
   const b = base();
   if (!b) return { ok: false, msg: 'Server non configurato.' };
-  if (password.length < 6) return { ok: false, msg: 'Password troppo corta.' };
+  if (password.trim().length === 0) return { ok: false, msg: 'Scrivi la password.' };
   const s = secretOf(password);
   const r = await call(`${b}/gate/${s}?${key()}`);
   if (!r) return { ok: false, msg: 'Connessione assente.' };
@@ -94,7 +94,7 @@ export async function logout(): Promise<void> {
 
 export async function changePassword(oldPwd: string, newPwd: string): Promise<string> {
   if (!vault) return 'Accedi di nuovo.';
-  if (newPwd.length < 6) return 'La nuova password deve avere almeno 6 caratteri.';
+  if (newPwd.trim().length === 0) return 'Scrivi la nuova password.';
   const oldS = secretOf(oldPwd);
   const newS = secretOf(newPwd);
   const ok = await commit([

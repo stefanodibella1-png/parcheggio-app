@@ -69,7 +69,6 @@ export function ControlCenter({ cfg, onBack }: { cfg: PublicConfig | null; onBac
                 ['codici', 'Codici'],
                 ['pubblicita', 'Pubbl.'],
                 ['muro', 'Muro'],
-                ['impostazioni', '⚙︎'],
               ] as [Tab, string][]
             ).map(([k, t]) => (
               <Pressable
@@ -169,7 +168,7 @@ function Login({ onIn }: { onIn: () => void }) {
   };
   return (
     <Card style={{ marginTop: space.md }}>
-      <Field label="Password admin" value={pwd} onChange={(v) => (setPwd(v), setMsg(null))} secure />
+      <Field label="Password" value={pwd} onChange={(v) => (setPwd(v), setMsg(null))} secure />
       {msg ? (
         <Label style={{ marginTop: space.sm }} color={RED}>
           {msg}
@@ -187,9 +186,9 @@ function Settings() {
   const [msg, setMsg] = useState<string | null>(null);
   return (
     <Card style={{ marginTop: space.md }}>
-      <Label bold>Cambia password admin</Label>
+      <Label bold>Cambia password</Label>
       <Field label="Password attuale" value={oldP} onChange={setOldP} secure />
-      <Field label="Nuova password (almeno 6 caratteri)" value={newP} onChange={setNewP} secure />
+      <Field label="Nuova password" value={newP} onChange={setNewP} secure />
       {msg ? <Label style={{ marginTop: space.sm }}>{msg}</Label> : null}
       <Button
         title="Cambia password"
