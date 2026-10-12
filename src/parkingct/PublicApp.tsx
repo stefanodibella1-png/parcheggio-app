@@ -1223,22 +1223,19 @@ function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: num
   );
   return (
     <Card style={{ marginTop: space.md }}>
-      {/* titolo e contatore */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>🤝 Invita {goal} amici</Text>
-          <Text style={{ color: c.textDim, fontSize: 14, marginTop: 2 }}>
-            {paid ? 'Il titolo più alto, con 🤝 nel muro' : 'e ParkingCT è gratis per sempre'}
-          </Text>
-          <HonorBanner done={done} />
+      {/* titolo su una riga (si rimpicciolisce da solo se lo schermo è stretto) */}
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={{ color: c.text, fontSize: 20, fontWeight: '900' }}>
+        Invita {goal} amici e diventa <Text style={{ color: '#B8860B' }}>Fondatore onorario</Text>
+      </Text>
+      {!paid ? (
+        <View style={{ alignSelf: 'flex-start', marginTop: 8, backgroundColor: '#2E7D32', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '900', letterSpacing: 1 }}>🏆 GRATIS PER SEMPRE</Text>
         </View>
-        <View style={{ alignItems: 'center', minWidth: 64 }}>
-          <Text style={{ color: done ? '#2E7D32' : c.text, fontSize: 28, fontWeight: '900' }}>
-            {count === null ? '–' : n}
-            <Text style={{ color: c.textDim, fontSize: 18 }}>/{goal}</Text>
-          </Text>
-        </View>
-      </View>
+      ) : (
+        <Label dim size={14} style={{ marginTop: 4 }}>
+          Il titolo più alto, con 🤝 accanto al tuo nome nel muro.
+        </Label>
+      )}
 
       {/* una spunta per amico, in una sola riga */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md }}>
@@ -1246,9 +1243,14 @@ function InviteCard({ cfg, count, paid }: { cfg: PublicConfig | null; count: num
           <InviteDot key={i} i={i} ok={i < n} fresh={i < n && seen !== null && i >= seen} />
         ))}
       </View>
-      <Label dim size={13} style={{ marginTop: 6, textAlign: 'center' }}>
-        {done ? '🎉 Fatto! Sei Fondatore onorario.' : 'Le spunte verdi compaiono da sole, appena un amico installa.'}
-      </Label>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+        <Label dim size={13} style={{ flex: 1 }}>
+          {done ? '🎉 Fatto! Sei Fondatore onorario.' : 'Le spunte verdi compaiono da sole, appena un amico installa.'}
+        </Label>
+        <Text style={{ color: done ? '#2E7D32' : c.text, fontSize: 18, fontWeight: '900', marginLeft: 8 }}>
+          {count === null ? '–' : n}/{goal}
+        </Text>
+      </View>
 
       {/* come funziona */}
       {!done ? (
