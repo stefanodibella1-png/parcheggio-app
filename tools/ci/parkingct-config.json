@@ -11,5 +11,6 @@
   "inviteFreeAt": 10,
   "landingUrl": "",
   "testerDays": 90,
-  "testerMin": 1
+  "testerMin": 1,
+  "testerMinCard": 1.3
 }

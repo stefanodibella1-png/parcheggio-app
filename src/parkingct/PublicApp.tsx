@@ -1395,13 +1395,13 @@ function FounderScreen({
             <TierCard
               title="Tester"
               price={cfg?.testerMin ?? 1}
-              priceLabel={`offerta libera · da ${euro(cfg?.testerMin ?? 1)}`}
+              priceLabel="offerta libera"
               perks={[
                 `🧪 ParkingCT completa per ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi dall'attivazione`,
                 '🚗 Ricorda dove parcheggi e, dal lancio, ti avvisa dei posti che si liberano',
                 '🛠️ Partecipi allo sviluppo: le tue segnalazioni contano',
               ]}
-              note={`Scegli tu quanto dare, da ${euro(cfg?.testerMin ?? 1)}. Con la carta Stripe trattiene circa ${euro(cardFee(cfg?.testerMin ?? 1))} di commissione. Dopo ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi puoi diventare Fondatore per continuare.`}
+              note="Scegli tu quanto dare: è un'offerta libera."
               onPress={() => void buy('tester')}
             />
           ) : null}

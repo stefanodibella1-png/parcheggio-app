@@ -15,8 +15,8 @@ const TIERS = [
   { tier: 'base', name: 'ParkingCT — Fondatore', price: cfgFile.priceBase ?? 3.9, gifts: 0, field: 'linkBase' },
   { tier: 'oro', name: 'ParkingCT — Fondatore Oro', price: cfgFile.priceGold ?? 9.9, gifts: cfgFile.giftsGold ?? 3, field: 'linkGold' },
   { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 7, field: 'linkPlat' },
-  // offerta libera: l'importo lo sceglie chi paga, minimo testerMin (1 €)
-  { tier: 'tester', name: 'ParkingCT — Tester (offerta libera)', price: cfgFile.testerMin ?? 1, gifts: 0, field: 'linkTester', custom: true },
+  // offerta libera: l'importo lo sceglie chi paga; con la carta minimo testerMinCard (1,30 €), lo dice Stripe solo se si scrive meno
+  { tier: 'tester', name: 'ParkingCT — Tester (offerta libera)', price: cfgFile.testerMinCard ?? 1.3, gifts: 0, field: 'linkTester', custom: true },
 ];
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
