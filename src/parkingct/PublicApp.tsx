@@ -502,7 +502,7 @@ function Home({
         <Card style={{ marginTop: space.md }}>
           <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>⭐ Fondatori: gratis per sempre</Text>
           <Label dim style={{ marginTop: 4 }}>
-            Da {euro(cfg?.priceBase ?? 2.9)} ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
+            Da {euro(cfg?.priceBase ?? 3.9)} ParkingCT è tua per sempre. Con Oro e Platino ricevi anche codici regalo: gratis per sempre anche per i tuoi
             amici.
           </Label>
           <Button title="Diventa fondatore" style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => go('founder')} />
@@ -1330,7 +1330,7 @@ function FounderScreen({
         <>
           <TierCard
             title="Fondatore"
-            price={cfg?.priceBase ?? 2.9}
+            price={cfg?.priceBase ?? 3.9}
             perks={['🎁 ParkingCT gratis per sempre', '⭐ Il titolo di fondatore nell\'app', '🧱 Il tuo nome nel muro dei fondatori']}
             onPress={() => void buy('base')}
           />

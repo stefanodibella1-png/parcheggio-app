@@ -53,7 +53,7 @@ const cfgDoc = await api('PATCH', `${fsBase}/config/public?${cfgMask}`, {
     supportUrl: { stringValue: cfgFile.supportUrl ?? '' },
     zoneTarget: { doubleValue: cfgFile.zoneTarget ?? 1000 },
     zoneName: { stringValue: cfgFile.zoneName ?? '' },
-    priceBase: { doubleValue: cfgFile.priceBase ?? 2.9 },
+    priceBase: { doubleValue: cfgFile.priceBase ?? 3.9 },
     priceGold: { doubleValue: cfgFile.priceGold ?? 9.9 },
     pricePlat: { doubleValue: cfgFile.pricePlat ?? 19.9 },
     giftsGold: { doubleValue: cfgFile.giftsGold ?? 3 },

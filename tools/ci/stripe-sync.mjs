@@ -12,7 +12,7 @@ const pid = process.env.PROJECT_ID;
 const LOOP_S = Number(process.env.LOOP_S ?? 270);
 const cfgFile = JSON.parse(readFileSync(process.env.CFG_JSON, 'utf8'));
 const TIERS = [
-  { tier: 'base', name: 'ParkingCT — Fondatore', price: cfgFile.priceBase ?? 2.9, gifts: 0, field: 'linkBase' },
+  { tier: 'base', name: 'ParkingCT — Fondatore', price: cfgFile.priceBase ?? 3.9, gifts: 0, field: 'linkBase' },
   { tier: 'oro', name: 'ParkingCT — Fondatore Oro', price: cfgFile.priceGold ?? 9.9, gifts: cfgFile.giftsGold ?? 3, field: 'linkGold' },
   { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 7, field: 'linkPlat' },
 ];

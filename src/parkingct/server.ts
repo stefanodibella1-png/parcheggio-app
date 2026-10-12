@@ -36,7 +36,7 @@ const DEFAULT_CONFIG: PublicConfig = {
   supportUrl: '',
   zoneTarget: 1000,
   zoneName: '',
-  priceBase: 2.9,
+  priceBase: 3.9,
   priceGold: 9.9,
   pricePlat: 19.9,
   giftsGold: 3,
