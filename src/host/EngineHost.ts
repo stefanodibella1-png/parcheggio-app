@@ -169,11 +169,14 @@ class Host {
   /** Riprende un test attivo (app riaperta o rilanciata dal sistema in background). */
   private async resume(test: db.TestRow): Promise<void> {
     const saved = await db.kvGet(`engine:${test.id}`);
+    let stale = false;
     if (saved) {
       try {
         this.engine = DetectionEngine.restore(saved, test.config);
       } catch {
+        // regole del motore cambiate con l'aggiornamento: si ricalcola tutto il test con le nuove
         this.engine = null;
+        stale = true;
       }
     }
     if (!this.engine) {
@@ -196,6 +199,8 @@ class Host {
     startActivity((a) => this.ingestActivity(a));
     startLocationBackup();
     await this.applySideEffectsForState(this.engine.state);
+    // eventi e parcheggi salvati erano calcolati con le regole vecchie: si riscrivono
+    if (stale) void this.rebuild(0);
   }
 
   subscribe(l: Listener): () => void {

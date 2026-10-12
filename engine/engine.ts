@@ -169,6 +169,12 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
+ * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
+ */
+export const ENGINE_LOGIC = 2;
+
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
   private m: Memory;
@@ -233,13 +239,16 @@ export class DetectionEngine {
   // ----- persistenza -------------------------------------------------------
 
   serialize(): string {
-    return JSON.stringify(this.m);
+    return JSON.stringify({ ...this.m, logic: ENGINE_LOGIC });
   }
 
   static restore(json: string, cfg: DetectionConfig = DEFAULT_CONFIG): DetectionEngine {
     const e = new DetectionEngine(cfg);
     const parsed = JSON.parse(json) as Memory;
     if (parsed.v !== 1) throw new Error('Versione stato motore non supportata');
+    // regole del motore cambiate: lo stato salvato è stato calcolato con le vecchie regole.
+    // Chi chiama ricostruisce tutto dal registro degli input con le regole nuove.
+    if ((parsed as Memory & { logic?: number }).logic !== ENGINE_LOGIC) throw new Error('Regole del motore cambiate');
     // campi aggiunti dopo il salvataggio (aggiornamento dell'app a test in corso): valori iniziali.
     // Senza questo, uno stato salvato da una versione precedente faceva crashare l'app (schermo nero).
     e.m = { ...e.m, ...parsed };
@@ -1551,6 +1560,8 @@ export class DetectionEngine {
     // punto dell'auto troppo incerto (garage senza GPS): nessuna previsione
     if (this.m.session?.gpsLostAtPark) return 0;
     if (!this.walkingEvidence(now)) return 0;
+    const d = this.distanceFromSpot(now);
+    if (d !== null && d > this.cfg.RETURN_MAX_DISTANCE_M) return 0;
     return Math.max(this.returnScoreShort(now), this.returnScoreLong(now));
   }
 
