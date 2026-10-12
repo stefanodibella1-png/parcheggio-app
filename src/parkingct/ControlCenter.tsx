@@ -338,13 +338,13 @@ function Codes({ cfg }: { cfg: PublicConfig | null }) {
     void reload();
   }, [reload]);
   const gifts = tier === 'oro' ? cfg?.giftsGold ?? 3 : tier === 'platino' ? cfg?.giftsPlat ?? 7 : 0;
-  const price = tier === 'oro' ? cfg?.priceGold : tier === 'platino' ? cfg?.pricePlat : cfg?.priceBase;
+  const price = tier === 'oro' ? cfg?.priceGold : tier === 'platino' ? cfg?.pricePlat : tier === 'tester' ? cfg?.testerMin : cfg?.priceBase;
   return (
     <View style={{ marginTop: space.md }}>
       <Card>
         <Label bold>Nuovo codice per un sostenitore</Label>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
-          {(['base', 'oro', 'platino'] as Tier[]).map((t) => (
+          {(['tester', 'base', 'oro', 'platino'] as Tier[]).map((t) => (
             <Pressable
               key={t}
               onPress={() => setTier(t)}

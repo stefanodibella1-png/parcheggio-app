@@ -9,5 +9,7 @@
   "giftsGold": 3,
   "giftsPlat": 7,
   "inviteFreeAt": 10,
-  "landingUrl": ""
+  "landingUrl": "",
+  "testerDays": 90,
+  "testerMin": 1
 }

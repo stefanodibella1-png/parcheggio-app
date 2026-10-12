@@ -96,7 +96,7 @@ service cloud.firestore {
       allow update: if adminBatch() || (
         // prima attivazione
         resource.data.usedBy == null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt', 'start'])
         && request.resource.data.usedBy is string
         && request.resource.data.usedAt is number) || (
         // stesso codice su un nuovo telefono / app reinstallata: al massimo 5 spostamenti

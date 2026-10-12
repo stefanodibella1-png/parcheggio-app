@@ -15,6 +15,8 @@ const TIERS = [
   { tier: 'base', name: 'ParkingCT — Fondatore', price: cfgFile.priceBase ?? 3.9, gifts: 0, field: 'linkBase' },
   { tier: 'oro', name: 'ParkingCT — Fondatore Oro', price: cfgFile.priceGold ?? 9.9, gifts: cfgFile.giftsGold ?? 3, field: 'linkGold' },
   { tier: 'platino', name: 'ParkingCT — Fondatore Platino', price: cfgFile.pricePlat ?? 19.9, gifts: cfgFile.giftsPlat ?? 7, field: 'linkPlat' },
+  // offerta libera: l'importo lo sceglie chi paga, minimo testerMin (1 €)
+  { tier: 'tester', name: 'ParkingCT — Tester (offerta libera)', price: cfgFile.testerMin ?? 1, gifts: 0, field: 'linkTester', custom: true },
 ];
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
@@ -59,9 +61,17 @@ for (const t of TIERS) {
   let prod = products.find((p) => p.metadata?.parkingct_tier === t.tier && p.active);
   if (!prod) prod = await stripe('POST', 'products', { name: t.name, metadata: { parkingct_tier: t.tier } });
   const prices = (await stripe('GET', 'prices', { product: prod.id, active: true, limit: 100 })).data;
-  let price = prices.find((p) => p.unit_amount === cents && p.currency === 'eur');
+  let price = t.custom
+    ? prices.find((p) => p.custom_unit_amount?.minimum === cents && p.currency === 'eur')
+    : prices.find((p) => p.unit_amount === cents && p.currency === 'eur');
   if (!price) {
-    price = await stripe('POST', 'prices', { product: prod.id, unit_amount: cents, currency: 'eur' });
+    price = await stripe(
+      'POST',
+      'prices',
+      t.custom
+        ? { product: prod.id, currency: 'eur', custom_unit_amount: { enabled: true, minimum: cents } }
+        : { product: prod.id, unit_amount: cents, currency: 'eur' },
+    );
     for (const p of prices) await stripe('POST', `prices/${p.id}`, { active: false });
   }
   let link = links.find((l) => l.active && l.metadata?.parkingct_tier === t.tier && l.metadata?.price === price.id);

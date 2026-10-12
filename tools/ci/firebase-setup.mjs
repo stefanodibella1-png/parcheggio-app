@@ -44,7 +44,7 @@ const fsBase = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(d
 const cfgFile = JSON.parse(readFileSync('tools/ci/parkingct-config.json', 'utf8'));
 const launchMs = Date.parse(cfgFile.launchAt);
 // solo questi campi: i link di pagamento (scritti da stripe-sync.mjs) restano
-const cfgMask = ['launchAt', 'supportUrl', 'zoneTarget', 'zoneName', 'priceBase', 'priceGold', 'pricePlat', 'giftsGold', 'giftsPlat', 'inviteFreeAt', 'landingUrl']
+const cfgMask = ['launchAt', 'supportUrl', 'zoneTarget', 'zoneName', 'priceBase', 'priceGold', 'pricePlat', 'giftsGold', 'giftsPlat', 'inviteFreeAt', 'landingUrl', 'testerDays', 'testerMin']
   .map((k) => `updateMask.fieldPaths=${k}`)
   .join('&');
 const cfgDoc = await api('PATCH', `${fsBase}/config/public?${cfgMask}`, {
@@ -60,6 +60,8 @@ const cfgDoc = await api('PATCH', `${fsBase}/config/public?${cfgMask}`, {
     giftsPlat: { doubleValue: cfgFile.giftsPlat ?? 7 },
     inviteFreeAt: { doubleValue: cfgFile.inviteFreeAt ?? 10 },
     landingUrl: { stringValue: cfgFile.landingUrl ?? '' },
+    testerDays: { doubleValue: cfgFile.testerDays ?? 90 },
+    testerMin: { doubleValue: cfgFile.testerMin ?? 1 },
   },
 });
 if (!cfgDoc.ok) fail('Configurazione ParkingCT', cfgDoc);

@@ -27,6 +27,10 @@ export interface PublicConfig {
   linkBase: string;
   linkGold: string;
   linkPlat: string;
+  linkTester: string;
+  /** Tester: giorni di uso completo dall'attivazione, e offerta minima in € */
+  testerDays: number;
+  testerMin: number;
 }
 
 export const APK_URL = 'https://github.com/stefanodibella1-png/parcheggio-app/releases/latest/download/ParkingCT.apk';
@@ -46,6 +50,9 @@ const DEFAULT_CONFIG: PublicConfig = {
   linkBase: '',
   linkGold: '',
   linkPlat: '',
+  linkTester: '',
+  testerDays: 90,
+  testerMin: 1,
 };
 
 export function base(): string | null {
@@ -102,6 +109,9 @@ export async function getConfig(): Promise<PublicConfig> {
         linkBase: str(f.linkBase) ?? '',
         linkGold: str(f.linkGold) ?? '',
         linkPlat: str(f.linkPlat) ?? '',
+        linkTester: str(f.linkTester) ?? '',
+        testerDays: num(f.testerDays) ?? DEFAULT_CONFIG.testerDays,
+        testerMin: num(f.testerMin) ?? DEFAULT_CONFIG.testerMin,
       };
       await kvSet('pc:config', JSON.stringify(cfg)).catch(() => {});
       return cfg;
@@ -151,7 +161,7 @@ export async function registerDevice(lat: number, lon: number, founder: boolean,
 // ---------------------------------------------------------------------------------------
 // sostenitori fondatori
 
-export type Tier = 'base' | 'oro' | 'platino' | 'regalo' | 'amici';
+export type Tier = 'base' | 'oro' | 'platino' | 'regalo' | 'amici' | 'tester';
 
 export const TIER_LABEL: Record<Tier, string> = {
   base: 'Sostenitore fondatore',
@@ -159,9 +169,12 @@ export const TIER_LABEL: Record<Tier, string> = {
   platino: 'Fondatore Platino',
   regalo: 'Fondatore (regalo di un amico)',
   amici: 'Fondatore ad honorem',
+  tester: 'Tester',
 };
 
 export interface FounderInfo {
+  /** prima attivazione del codice (per il Tester: inizio dei 3 mesi) */
+  start?: number;
   code: string;
   t: number;
   tier: Tier;
@@ -194,9 +207,9 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
   const usedBy = str(doc.fields.usedBy);
   let result: RedeemResult = 'ok';
   if (!usedBy) {
-    const up = await call(`${b}/codes/${h}?updateMask.fieldPaths=usedBy&updateMask.fieldPaths=usedAt&${key()}`, {
+    const up = await call(`${b}/codes/${h}?updateMask.fieldPaths=usedBy&updateMask.fieldPaths=usedAt&updateMask.fieldPaths=start&${key()}`, {
       method: 'PATCH',
-      body: JSON.stringify({ fields: { usedBy: { stringValue: id }, usedAt: { doubleValue: Date.now() } } }),
+      body: JSON.stringify({ fields: { usedBy: { stringValue: id }, usedAt: { doubleValue: Date.now() }, start: { doubleValue: Date.now() } } }),
     });
     if (!up) return 'offline';
     if (!up.ok) return 'invalid';
@@ -214,7 +227,9 @@ export async function redeemCode(input: string): Promise<RedeemResult> {
     result = 'moved';
   }
   const tier = (str(doc.fields.tier) as Tier | null) ?? 'base';
-  const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode) };
+  // inizio: la prima attivazione in assoluto (un cambio telefono o una reinstallazione non lo azzera)
+  const start = num(doc.fields.start) ?? (usedBy ? num(doc.fields.usedAt) : null) ?? Date.now();
+  const info: FounderInfo = { code: prettyCode(code), t: Date.now(), tier, gifts: strList(doc.fields.gifts).map(prettyCode), start };
   await kvSet('pc:founder', JSON.stringify(info)).catch(() => {});
   await kvSet('pc:founderCheckT', String(Date.now())).catch(() => {});
   return result;
@@ -247,7 +262,7 @@ export async function founderInfo(): Promise<FounderInfo | null> {
   if (!s) return null;
   const f = JSON.parse(s) as Partial<FounderInfo>;
   if (!f.code && f.tier !== 'amici') return null;
-  return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [] };
+  return { code: f.code ?? '', t: f.t ?? 0, tier: f.tier ?? 'base', gifts: f.gifts ?? [], start: f.start ?? f.t ?? 0 };
 }
 
 /** Quali codici regalo sono già stati usati dagli amici. */
@@ -461,8 +476,8 @@ export function wallShows(w: WallEntry): boolean {
   return checkName(w.name) === 'ok';
 }
 
-export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4 };
-export const TIER_BADGE: Record<Tier, string> = { platino: '💎', oro: '🥇', base: '⭐', regalo: '🎁', amici: '🤝' };
+export const TIER_RANK: Record<Tier, number> = { platino: 0, oro: 1, base: 2, regalo: 3, amici: 4, tester: 5 };
+export const TIER_BADGE: Record<Tier, string> = { platino: '💎', oro: '🥇', base: '⭐', regalo: '🎁', amici: '🤝', tester: '🧪' };
 
 async function wallId(f: FounderInfo): Promise<string> {
   if (f.tier === 'amici') return `inv-${await myInviteCode()}`;
@@ -587,7 +602,19 @@ export interface Pending {
 
 export function payLink(cfg: PublicConfig | null, tier: Tier): string {
   if (!cfg) return '';
-  return tier === 'oro' ? cfg.linkGold : tier === 'platino' ? cfg.linkPlat : cfg.linkBase;
+  return tier === 'oro' ? cfg.linkGold : tier === 'platino' ? cfg.linkPlat : tier === 'tester' ? cfg.linkTester : cfg.linkBase;
+}
+
+/** Tester: millisecondi di uso rimasti (null se non è un tester) */
+export function testerLeftMs(f: FounderInfo | null, cfg: PublicConfig | null, now: number): number | null {
+  if (!f || f.tier !== 'tester') return null;
+  const days = cfg?.testerDays ?? 90;
+  return (f.start ?? f.t) + days * 86_400_000 - now;
+}
+
+/** commissione stimata della carta (Stripe, carte europee: 1,5% + 0,25 €) */
+export function cardFee(amount: number): number {
+  return Math.round((amount * 0.015 + 0.25) * 100) / 100;
 }
 
 /** Prepara il pagamento: restituisce l'indirizzo da aprire ('' se i pagamenti non sono attivi). */

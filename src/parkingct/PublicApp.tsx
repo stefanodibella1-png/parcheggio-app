@@ -33,6 +33,8 @@ import { getSessions, kvGet, kvSet } from '../storage/db.ts';
 import {
   APK_URL,
   euro,
+  cardFee,
+  testerLeftMs,
   collectPurchase,
   formatCodeInput,
   pendingPurchase,
@@ -91,7 +93,9 @@ export function PublicApp() {
       Alert.alert('Codice attivo su un altro telefono', 'Il tuo codice ParkingCT è stato inserito su un altro telefono. Per usarlo di nuovo qui, inseriscilo nella pagina Fondatori.');
     }
     const launched = Date.now() >= conf.launchAt;
-    host.setCommunityAllowed(launched);
+    // i Tester vedono i posti che si liberano anche prima del lancio (finché il periodo è attivo)
+    const left = testerLeftMs(await founderInfo(), conf, Date.now());
+    host.setCommunityAllowed(launched || (left !== null && left > 0));
     if (launched && (await kvGet('pc:launchParty').catch(() => null)) !== '1') {
       await kvSet('pc:launchParty', '1').catch(() => {});
       setParty('launch');
@@ -402,6 +406,8 @@ function Home({
   }, [founder, cfg, invites, onInviteReward]);
 
   const launched = cfg ? now >= cfg.launchAt : false;
+  const testerLeft = testerLeftMs(founder, cfg, now);
+  if (testerLeft !== null && testerLeft <= 0) return <TesterExpired cfg={cfg} go={go} />;
   const session = s.session;
   const st = s.snapshot?.state;
   const driving = st === 'IN_VEHICLE' || st === 'VEHICLE_MOVING' || st === 'VEHICLE_STOPPED' || st === 'POSSIBLE_PARKING' || st === 'VEHICLE_DEPARTED';
@@ -434,8 +440,12 @@ function Home({
       {founder ? (
         <Pressable onPress={() => go('founder')}>
           <Label size={13} color={RED} bold style={{ marginTop: 2 }}>
-            ⭐ {TIER_LABEL[founder.tier]}
-            {founder.gifts.length ? ` · ${founder.gifts.length} codici regalo da donare ›` : ''}
+            {TIER_BADGE[founder.tier]} {TIER_LABEL[founder.tier]}
+            {founder.tier === 'tester' && testerLeft !== null && testerLeft > 0
+              ? ` · ancora ${Math.ceil(testerLeft / 86_400_000)} giorni ›`
+              : founder.gifts.length
+                ? ` · ${founder.gifts.length} codici regalo da donare ›`
+                : ''}
           </Label>
         </Pressable>
       ) : null}
@@ -524,6 +534,23 @@ function Home({
           </View>
         </Card>
       </Pressable>
+    </ScrollView>
+  );
+}
+
+/** fine del periodo Tester: l'app si blocca e chiede di continuare come Fondatore */
+function TesterExpired({ cfg, go }: { cfg: PublicConfig | null; go: (s: Screen) => void }) {
+  const c = usePalette();
+  return (
+    <ScrollView contentContainerStyle={{ padding: space.xl, flexGrow: 1, justifyContent: 'center' }}>
+      <Text style={{ fontSize: 64, textAlign: 'center' }}>🧪</Text>
+      <Text style={{ color: c.text, fontSize: 26, fontWeight: '800', textAlign: 'center', marginTop: space.md }}>Grazie, Tester!</Text>
+      <Label dim size={16} style={{ textAlign: 'center', marginTop: space.sm, lineHeight: 23 }}>
+        Il tuo periodo di prova di {Math.round((cfg?.testerDays ?? 90) / 30)} mesi è finito. Il tuo aiuto è stato prezioso. Per continuare a usare
+        ParkingCT diventa Fondatore: per te resta gratis per sempre.
+      </Label>
+      <Button title={`⭐ Diventa Fondatore · ${euro(cfg?.priceBase ?? 3.9)}`} style={{ marginTop: space.xl, backgroundColor: RED }} onPress={() => go('founder')} />
+      <Button title="Ho già un codice" variant="ghost" style={{ marginTop: space.md }} onPress={() => go('founder')} />
     </ScrollView>
   );
 }
@@ -1139,12 +1166,16 @@ function TierCard({
   perks,
   highlight,
   onPress,
+  priceLabel,
+  note,
 }: {
   title: string;
   price: number;
   perks: string[];
   highlight?: boolean;
   onPress: () => void;
+  priceLabel?: string;
+  note?: string;
 }) {
   const c = usePalette();
   return (
@@ -1152,7 +1183,7 @@ function TierCard({
       <Card style={{ marginTop: space.md, borderColor: highlight ? RED : c.border, borderWidth: highlight ? 2 : 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={{ color: c.text, fontSize: 19, fontWeight: '800' }}>{title}</Text>
-          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>da {euro(price)}</Text>
+          <Text style={{ color: RED, fontSize: 19, fontWeight: '800' }}>{priceLabel ?? euro(price)}</Text>
         </View>
         {highlight ? (
           <Label size={12} bold color={RED}>
@@ -1164,7 +1195,17 @@ function TierCard({
             {p}
           </Label>
         ))}
-        <Button title={`Scegli ${title} · ${euro(price)}`} small style={{ marginTop: space.md, backgroundColor: highlight ? RED : '#37474F' }} onPress={onPress} />
+        {note ? (
+          <Label dim size={13} style={{ marginTop: 6 }}>
+            {note}
+          </Label>
+        ) : null}
+        <Button
+          title={`Scegli ${title}${priceLabel ? '' : ` · ${euro(price)}`}`}
+          small
+          style={{ marginTop: space.md, backgroundColor: highlight ? RED : '#37474F' }}
+          onPress={onPress}
+        />
       </Card>
     </Pressable>
   );
@@ -1314,7 +1355,7 @@ function FounderScreen({
               ))}
             </Card>
           ) : null}
-          {founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' ? (
+          {founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester' ? (
             <Card style={{ marginTop: space.md }}>
               <Label bold>Vuoi regalarla anche ai tuoi amici?</Label>
               <Label dim size={14} style={{ marginTop: 4 }}>
@@ -1326,8 +1367,22 @@ function FounderScreen({
         </>
       ) : null}
 
-      {!founder || founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' ? (
+      {!founder || founder.tier === 'base' || founder.tier === 'regalo' || founder.tier === 'amici' || founder.tier === 'tester' ? (
         <>
+          {!founder ? (
+            <TierCard
+              title="Tester"
+              price={cfg?.testerMin ?? 1}
+              priceLabel={`offerta libera · da ${euro(cfg?.testerMin ?? 1)}`}
+              perks={[
+                `🧪 ParkingCT completa per ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi dall'attivazione`,
+                '🚀 Accesso anticipato: vedi i posti che si liberano prima del lancio',
+                '🛠️ Partecipi allo sviluppo: le tue segnalazioni contano',
+              ]}
+              note={`Scegli tu quanto dare, da ${euro(cfg?.testerMin ?? 1)}. Con la carta Stripe trattiene circa ${euro(cardFee(cfg?.testerMin ?? 1))} di commissione. Dopo ${Math.round((cfg?.testerDays ?? 90) / 30)} mesi puoi diventare Fondatore per continuare.`}
+              onPress={() => void buy('tester')}
+            />
+          ) : null}
           <TierCard
             title="Fondatore"
             price={cfg?.priceBase ?? 3.9}
@@ -1434,6 +1489,7 @@ const TIER_LEGEND: { tier: Tier; text: string }[] = [
   { tier: 'base', text: 'Fondatore' },
   { tier: 'regalo', text: 'Regalo di un amico' },
   { tier: 'amici', text: 'Ha portato i suoi amici' },
+  { tier: 'tester', text: 'Tester' },
 ];
 
 function WallChoice({ founder, onSaved }: { founder: FounderInfo; onSaved?: () => void }) {
