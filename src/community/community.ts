@@ -136,7 +136,7 @@ export async function withdrawSpot(id: string): Promise<void> {
 export async function fetchNearby(
   center: { latitude: number; longitude: number },
   radiusM: number,
-  myDeviceId: string,
+  myDeviceId: string | string[],
   now: number,
 ): Promise<NearbySpot[] | null> {
   const b = base();
@@ -165,7 +165,8 @@ export async function fetchNearby(
   for (const row of rows) {
     if (!row.document) continue;
     const s = fromDoc(row.document.fields);
-    if (!s || s.expiresAt <= now || s.deviceId === myDeviceId) continue;
+    const mine = Array.isArray(myDeviceId) ? myDeviceId : [myDeviceId];
+    if (!s || s.expiresAt <= now || mine.includes(s.deviceId)) continue;
     const d = Math.round(distanceM(center, s));
     if (d <= radiusM) out.push({ ...s, distanceM: d });
   }

@@ -137,6 +137,16 @@ export async function deviceId(): Promise<string> {
   return id;
 }
 
+/**
+ * Identificativo pubblico del telefono, diverso ogni giorno: nei posti condivisi e nei parcheggi
+ * inviati al server non compare mai l'id fisso, così nessuno può collegare i parcheggi di una
+ * persona nel tempo (casa, lavoro, abitudini).
+ */
+export function publicId(device: string, t: number): string {
+  const d = new Date(t);
+  return sha256Hex(`pub:${device}:${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`).slice(0, 16);
+}
+
 /** Registra il telefono nella sua zona (cella geohash di ~5 km). */
 export async function registerDevice(lat: number, lon: number, founder: boolean, tier: string, version: string): Promise<string | null> {
   const b = base();
@@ -445,7 +455,8 @@ export async function uploadParking(s: ParkingSession): Promise<void> {
   const b = base();
   if (!b || s.parkedT === null) return;
   const p = s.spot.pointFinal;
-  const id = `${await deviceId()}-${s.parkingId}`;
+  const pub = publicId(await deviceId(), s.parkedT);
+  const id = `${pub}-${s.parkingId}`;
   await call(`${b}/parkings/${encodeURIComponent(id)}?${key()}`, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -460,7 +471,7 @@ export async function uploadParking(s: ParkingSession): Promise<void> {
         quality: { stringValue: s.spot.pointQuality },
         atFuel: { booleanValue: !!s.atFuelStation },
         gpsLost: { booleanValue: !!s.gpsLostAtPark },
-        deviceId: { stringValue: await deviceId() },
+        deviceId: { stringValue: pub },
       },
     }),
   });

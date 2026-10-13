@@ -10,6 +10,7 @@ import { speak } from '../services/voice.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
 import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
 import { distanceM } from '../../engine/geo.ts';
+import { publicId } from '../parkingct/server.ts';
 
 export interface CommunityState {
   configured: boolean;
@@ -121,7 +122,7 @@ export class CommunityBridge {
         continue;
       }
       if (distanceM(p, r.spot) <= this.cfg().COMMUNITY_TAKEN_RADIUS_M) {
-        await recordTaken({ spotId: id, latitude: r.spot.latitude, longitude: r.spot.longitude, t: now, deviceId: this.deviceId });
+        await recordTaken({ spotId: id, latitude: r.spot.latitude, longitude: r.spot.longitude, t: now, deviceId: publicId(this.deviceId, now) });
         this.received.delete(id);
         return;
       }
@@ -146,7 +147,7 @@ export class CommunityBridge {
       freeAt,
       createdAt: now,
       expiresAt: Math.max(freeAt, now) + ttl * 1000,
-      deviceId: this.deviceId,
+      deviceId: publicId(this.deviceId, now),
     });
     this.state.shared = ok ? { id: session.parkingId, kind, freeAt } : this.state.shared;
     this.state.error = ok ? null : 'Community: invio non riuscito (rete?)';
@@ -182,7 +183,7 @@ export class CommunityBridge {
     this.lastPollT = now;
     this.polling = true;
     const driving = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING'].includes(snap.state);
-    void fetchNearby(last, cfg.COMMUNITY_RADIUS_M, this.deviceId, now)
+    void fetchNearby(last, cfg.COMMUNITY_RADIUS_M, [publicId(this.deviceId, now), publicId(this.deviceId, now - 86_400_000)], now)
       .then(async (list) => {
         if (list === null) {
           this.state.error = 'Community: server non raggiungibile';
