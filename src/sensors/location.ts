@@ -3,6 +3,28 @@ import * as Location from 'expo-location';
 import { AppState, Platform } from 'react-native';
 import type { LocationSample } from '../../engine/types.ts';
 import { IS_PUBLIC } from '../variant.ts';
+import { ActivityRecognition } from '../../modules/activity-recognition/index.ts';
+
+/**
+ * Android (build 19+): il GPS lo gestisce il servizio in primo piano nativo del modulo.
+ * Il servizio di expo-location veniva chiuso dal telefono (test 13/10: 4 ore senza posizioni).
+ * Le posizioni arrivano nel buffer nativo e l'host le legge ogni 5 s (drainLocations).
+ */
+export function nativeGps(): boolean {
+  return Platform.OS === 'android' && ActivityRecognition.locationServicePresent;
+}
+
+const INTERVAL: Record<LocationMode, number> = { high: 1000, parked: 2000, away: 5000 };
+
+function startNative(mode: LocationMode, body: string): void {
+  // servizio già attivo: si cambia solo la frequenza (in background Android non permette di riavviarlo)
+  if (ActivityRecognition.locationServiceRunning() && ActivityRecognition.setLocationInterval(INTERVAL[mode])) return;
+  ActivityRecognition.startLocationService(
+    INTERVAL[mode],
+    IS_PUBLIC ? 'ParkingCT è attivo' : 'PARCHEGGIO · test attivo',
+    IS_PUBLIC ? 'Ricordo dove parcheggi. Tocca per aprire.' : body,
+  );
+}
 
 export const LOCATION_TASK = 'parcheggio-location';
 export const GEOFENCE_TASK = 'parcheggio-geofence';
@@ -49,6 +71,16 @@ function optionsFor(mode: LocationMode, body: string): Location.LocationTaskOpti
 
 export async function startLocation(mode: LocationMode, body: string): Promise<void> {
   if (mode === currentMode && body === currentBody) return;
+  if (nativeGps()) {
+    currentMode = mode;
+    currentBody = body;
+    // il servizio vecchio di expo-location, se attivo da una versione precedente, si spegne
+    if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+    }
+    startNative(mode, body);
+    return;
+  }
   // in background su Android non si tocca un servizio già attivo
   if (Platform.OS === 'android' && AppState.currentState !== 'active' && (await locationRunning())) return;
   currentMode = mode;
@@ -59,6 +91,7 @@ export async function startLocation(mode: LocationMode, body: string): Promise<v
 export async function stopLocation(): Promise<void> {
   currentMode = null;
   currentBody = '';
+  if (nativeGps()) ActivityRecognition.stopLocationService();
   if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)) {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK);
   }
@@ -74,10 +107,15 @@ export async function restartLocation(mode: LocationMode, body: string): Promise
   if (Platform.OS === 'android' && AppState.currentState !== 'active') return;
   currentMode = mode;
   currentBody = body;
+  if (nativeGps()) {
+    startNative(mode, body);
+    return;
+  }
   await Location.startLocationUpdatesAsync(LOCATION_TASK, optionsFor(mode, body));
 }
 
 export async function locationRunning(): Promise<boolean> {
+  if (nativeGps()) return ActivityRecognition.locationServiceRunning();
   return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
 }
 

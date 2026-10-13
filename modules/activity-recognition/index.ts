@@ -27,6 +27,10 @@ type NativeModuleShape = {
   startLocation?(intervalMs: number): void;
   stopLocation?(): void;
   getBufferedLocations?(): Promise<NativeLocation[]>;
+  startLocationService?(intervalMs: number, title: string, text: string): void;
+  stopLocationService?(): void;
+  setLocationInterval?(intervalMs: number): boolean;
+  locationServiceRunning?(): boolean;
 };
 
 export type NativeLocation = {
@@ -71,6 +75,20 @@ export const ActivityRecognition = {
   },
   stopLocation(): void {
     if (typeof Native?.stopLocation === 'function') Native.stopLocation();
+  },
+  /** Android: GPS nel servizio in primo piano nativo */
+  locationServicePresent: typeof Native?.startLocationService === 'function',
+  startLocationService(intervalMs: number, title: string, text: string): void {
+    if (typeof Native?.startLocationService === 'function') Native.startLocationService(intervalMs, title, text);
+  },
+  setLocationInterval(intervalMs: number): boolean {
+    return typeof Native?.setLocationInterval === 'function' ? Native.setLocationInterval(intervalMs) : false;
+  },
+  stopLocationService(): void {
+    if (typeof Native?.stopLocationService === 'function') Native.stopLocationService();
+  },
+  locationServiceRunning(): boolean {
+    return typeof Native?.locationServiceRunning === 'function' ? Native.locationServiceRunning() : false;
   },
   async getBufferedLocations(): Promise<NativeLocation[]> {
     return typeof Native?.getBufferedLocations === 'function' ? Native.getBufferedLocations() : [];

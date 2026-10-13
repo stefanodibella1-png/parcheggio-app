@@ -23,6 +23,7 @@ import * as db from '../storage/db.ts';
 import {
   getLocationMode,
   locationRunning,
+  nativeGps,
   restartLocation,
   startGeofences,
   startLocation,
@@ -823,7 +824,7 @@ class Host {
     // In background si resta nella modalità corrente (più consumo, ma sicuro).
     // Anche dopo un riavvio dell'app in background (getLocationMode() null) il servizio può essere
     // ancora attivo: toccarlo da qui lo fermerebbe senza poterlo riavviare (test 09/10 notte).
-    if (Platform.OS === 'android' && AppState.currentState !== 'active') {
+    if (Platform.OS === 'android' && AppState.currentState !== 'active' && !nativeGps()) {
       if (getLocationMode() !== null || (await locationRunning())) return;
     }
     const st = this.engine?.state ?? 'UNKNOWN';

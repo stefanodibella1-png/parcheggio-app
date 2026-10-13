@@ -8,7 +8,7 @@ import java.util.ArrayDeque
  * restano qui finché JS non le chiede con getBufferedLocations().
  */
 object LocationBus {
-  private const val MAX = 4000
+  private const val MAX = 20000
   private val buffer = ArrayDeque<Map<String, Any>>()
 
   @Synchronized

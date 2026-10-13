@@ -16,6 +16,14 @@ class ActivityReceiver : BroadcastReceiver() {
     if (!ActivityRecognitionResult.hasResult(intent)) return
     val result = ActivityRecognitionResult.extractResult(intent) ?: return
     val a = result.mostProbableActivity
+    // guardiano nativo: in auto ma il GPS tace da 2 minuti → si rifà la richiesta (anche con JS congelato)
+    val svc = LocationService.instance
+    if (svc != null && a.type == DetectedActivity.IN_VEHICLE && a.confidence >= 70 &&
+      System.currentTimeMillis() - LocationService.lastFixT > 120_000 &&
+      System.currentTimeMillis() - lastKick > 300_000) {
+      lastKick = System.currentTimeMillis()
+      svc.kick()
+    }
     ActivityBus.emit(
       mapOf(
         "t" to result.time.toDouble(),
@@ -28,6 +36,8 @@ class ActivityReceiver : BroadcastReceiver() {
   }
 
   companion object {
+    @Volatile var lastKick = 0L
+
     fun map(type: Int): String = when (type) {
       DetectedActivity.IN_VEHICLE -> "IN_VEHICLE"
       DetectedActivity.ON_BICYCLE -> "ON_BICYCLE"

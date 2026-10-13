@@ -80,6 +80,37 @@ class ActivityRecognitionModule : Module() {
       stopLocation()
     }
 
+    // GPS nel servizio in primo piano nativo (sostituisce expo-location su Android)
+    Function("startLocationService") { intervalMs: Int, title: String, text: String ->
+      if (!hasLocationPermission()) return@Function false
+      try {
+        LocationService.start(context, intervalMs.toLong(), title, text)
+        true
+      } catch (e: Exception) {
+        // Android 12+: avvio di un servizio in primo piano non consentito con l'app in background
+        false
+      }
+    }
+
+    // cambio di frequenza senza riavviare il servizio (consentito anche con l'app in background)
+    Function("setLocationInterval") { intervalMs: Int ->
+      val svc = LocationService.instance
+      if (svc != null) {
+        context.getSharedPreferences(LocationService.PREFS, android.content.Context.MODE_PRIVATE).edit()
+          .putLong(LocationService.EXTRA_INTERVAL, intervalMs.toLong()).apply()
+        svc.request(intervalMs.toLong())
+        true
+      } else false
+    }
+
+    Function("stopLocationService") {
+      LocationService.stop(context)
+    }
+
+    Function("locationServiceRunning") {
+      LocationService.running
+    }
+
     AsyncFunction("getBufferedLocations") {
       LocationBus.drain()
     }

@@ -15,6 +15,15 @@ export function locationBackupAvailable(): boolean {
 
 export function startLocationBackup(): void {
   if (!locationBackupAvailable()) return;
+  // con il servizio GPS nativo (build 19+) la riserva non serve: stesse posizioni, doppio consumo
+  if (ActivityRecognition.locationServicePresent) {
+    try {
+      ActivityRecognition.stopLocation();
+    } catch {
+      // niente
+    }
+    return;
+  }
   try {
     ActivityRecognition.startLocation(LOCATION_BACKUP_MS);
   } catch {
