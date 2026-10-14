@@ -18,8 +18,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 8. ✅ **Privacy / GDPR**: non ora (PARCHEGGIO non va su Google Play). Su **ParkingCT** vanno sistemati **subito alla ripresa**, a prescindere da Google Play: informativa privacy, schermata che spiega la posizione in background prima del permesso, al server solo parcheggi e posti (mai il percorso GPS), errori senza posizioni, cancellazione automatica dei dati, revisione professionale prima di incassare.
 
+9. ✅ **Google Play**: account aperto solo dopo prova GPS (2) + prova a due telefoni (4) superate. Data limite 10/11: se le prove non sono passate, il lancio del 1/12 slitta. Test chiuso di 14 giorni con ParkingCT e i tester della microzona. Privacy ParkingCT (8) prima del test chiuso. Claude avvisa Stefano quando le prove sono passate, e comunque il 3/11.
+
 ## Decisioni ancora da prendere
-9. Google Play (proposta: aprire l'account subito; i 12 tester × 14 giorni = tester della microzona).
 10. Microzona e tester.
 
 ## Da fare / da ricordare — con il momento giusto
@@ -35,6 +36,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
 | J | **Strumento metriche** `tools/metrics.ts` (precisione, copertura, anticipo da export + revisioni) — lavoro per un agente, solo cartella tools/ | Subito, in parallelo |
 | K | **Privacy e GDPR su ParkingCT** (vedi decisione 8) | Alla ripresa di ParkingCT, e comunque PRIMA che la usi qualsiasi tester esterno |
+| L | **Aprire account Google Play (25 $)** | Appena superate le prove 2 e 4; promemoria fisso il 3/11; limite 10/11 |
 | H | ✓ 14/10: pacchetti fondatore **NON acquistabili** (link Stripe vuoti, nessuna chiave Stripe) | fatto |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
