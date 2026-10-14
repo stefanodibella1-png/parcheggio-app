@@ -14,8 +14,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 6. ✅ **Sicurezza Firestore**: accesso anonimo Firebase (identità invisibile, serve aggiornamento app → coordinare con la build GPS); ognuno modifica/ritira solo i propri posti; rifiuto coordinate fuori Catania e provincia, dati malformati, orari assurdi; scadenza automatica 15 min; limite di frequenza per telefono; test automatici d'attacco a ogni modifica. Lavoro per un agente.
 
+7. ✅ **Pagamenti**: niente incassi fino alla fine della prova in microzona. ParkingCT resta con le funzioni richieste da Stefano (pacchetti visibili, link vuoti). Tester della microzona gratis. Inviti senza premi finché non sono verificati dal server. Idea di Stefano: rinominare "Fondatore" in "Sostenitore" → da decidere al momento della riapertura dei pagamenti, insieme a: vantaggi sì/no, consulenza legale, regole Google Play (verificare la policy attuale su contributi/mance).
+
 ## Decisioni ancora da prendere
-7. Pagamenti / fondatori / inviti (proposta: niente incassi prima della prova).
 8. Privacy / GDPR.
 9. Google Play (proposta: aprire l'account subito; i 12 tester × 14 giorni = tester della microzona).
 10. Microzona e tester.
