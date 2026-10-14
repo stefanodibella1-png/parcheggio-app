@@ -97,6 +97,16 @@ interface Memory {
   arrivedInVehicle: boolean;
   steps: { t: number; steps: number }[]; // ultimi 20 s
   hasMotion: boolean;
+  /** auto spostata durante un buco GPS (regola GAP_MOVE_*) */
+  lastGoodFix?: LocationSample | null;
+  /** IN_VEHICLE con confidenza >= GAP_MOVE_VEH_CONFIDENCE (istanti) */
+  vehStrongT?: number[];
+  /** campioni a piedi (istanti) */
+  walkActTs?: number[];
+  /** ingressi nel geofence più piccolo attorno all'auto (istanti) */
+  carEnterT?: number[];
+  /** buco GPS appena chiuso: ultima posizione valida prima e prima posizione valida dopo */
+  gapMove?: { from: LocationSample; to: LocationSample } | null;
 
   vehicleOkSince: number | null;
   vehicleFastSince: number | null;
@@ -175,7 +185,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 5;
+export const ENGINE_LOGIC = 6;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -326,6 +336,15 @@ export class DetectionEngine {
       case 'carryOver':
         this.onCarryOver(input, now);
         break;
+      case 'geofence': {
+        const inner = `parking-${Math.min(...this.cfg.RETURN_GEOFENCE_RADII)}`;
+        if (input.region === inner && input.event === 'enter') {
+          if (!this.m.carEnterT) this.m.carEnterT = [];
+          this.m.carEnterT.push(input.t);
+          if (this.m.carEnterT.length > 50) this.m.carEnterT.shift();
+        }
+        break;
+      }
       case 'mapFeatures':
         if (!this.m.signals) this.m.signals = {};
         for (const g of input.signals) {
@@ -452,6 +471,9 @@ export class DetectionEngine {
     }
     if (!valid) return; // scartato: registrato nell'export ma non usato
 
+    const pg = m.lastGoodFix;
+    if (pg && s.t - pg.t >= cfg.GAP_MOVE_MIN_GAP_S * 1000) m.gapMove = { from: pg, to: s };
+    if (!pg || s.t >= pg.t) m.lastGoodFix = s;
     m.fixes.push(s);
     if (DRIVING.includes(m.state)) {
       if (!m.drivePath) m.drivePath = [];
@@ -546,6 +568,14 @@ export class DetectionEngine {
     this.m.lastActivityAny = a;
     if ((a.activity === 'WALKING' || a.activity === 'RUNNING') && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       this.m.lastWalkActT = Math.max(this.m.lastWalkActT ?? 0, a.t);
+      if (!this.m.walkActTs) this.m.walkActTs = [];
+      this.m.walkActTs.push(a.t);
+      if (this.m.walkActTs.length > 300) this.m.walkActTs.shift();
+    }
+    if (a.activity === 'IN_VEHICLE' && a.confidence >= this.cfg.GAP_MOVE_VEH_CONFIDENCE) {
+      if (!this.m.vehStrongT) this.m.vehStrongT = [];
+      this.m.vehStrongT.push(a.t);
+      if (this.m.vehStrongT.length > 300) this.m.vehStrongT.shift();
     }
     if (a.activity !== 'UNKNOWN' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       // non sostituire con un campione più vecchio arrivato in ritardo
@@ -745,7 +775,7 @@ export class DetectionEngine {
 
     const ctx = { now, vScore, wScore, kmh, act, vehicleConfirmed, walkingConfirmed, stationary };
 
-    switch (m.state) {
+    if (!this.movedDuringGap(ctx)) switch (m.state) {
       case 'UNKNOWN':
       case 'WALKING':
       case 'LOW_CONFIDENCE':
@@ -998,7 +1028,104 @@ export class DetectionEngine {
     m.sessions.push(session);
     m.stopPhase = null;
     m.awayVehicleLogged = false;
+    m.carEnterT = [];
     this.transition('PARKED', session.atFuelStation ? `${reason} (distributore di carburante: rifornimento, non condiviso)` : reason, now, { parkingId });
+  }
+
+
+  /**
+   * Auto spostata mentre il GPS taceva (14/10: nessuna posizione dalle 15:46 alle 17:58, viaggio
+   * di ritorno intero nel buco). Quando il GPS torna lontano dall'auto, il parcheggio si chiude
+   * solo se prima degli IN_VEHICLE c'è stato un ritorno all'auto (ingresso nel geofence più
+   * piccolo, oppure ultima posizione nota vicino all'auto senza camminate dopo): altrimenti
+   * potrebbe essere un autobus o un passaggio. Il posto liberato in ritardo non si condivide.
+   */
+  private movedDuringGap(c: Ctx): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    const g = m.gapMove;
+    m.gapMove = null;
+    const s = m.session;
+    if (!g || !s || !PARKED_FAMILY.includes(m.state)) return false;
+    const spot = s.spot.pointFinal;
+    const d = distanceM(spot, g.to);
+    if (d < cfg.GAP_MOVE_MIN_DIST_M) return false;
+    const inGap = (t: number) => t > g.from.t && t < g.to.t;
+    const strong = (m.vehStrongT ?? []).filter(inGap);
+    const after = (t0: number) => strong.filter((t) => t > t0);
+
+    let backT: number | null = null;
+    let how = '';
+    const enters = (m.carEnterT ?? []).filter(inGap).sort((a, b) => b - a);
+    for (const e of enters) {
+      if (after(e).length >= cfg.GAP_MOVE_MIN_VEH_ACTS) {
+        backT = e;
+        how = 'ingresso nel geofence attorno all\'auto';
+        break;
+      }
+    }
+    if (backT === null && distanceM(spot, g.from) <= cfg.GAP_MOVE_AT_CAR_M) {
+      const firstVeh = strong[0] ?? g.to.t;
+      const walked = (m.walkActTs ?? []).some((t) => t > g.from.t && t < firstVeh);
+      if (!walked && strong.length >= cfg.GAP_MOVE_MIN_VEH_ACTS) {
+        backT = g.from.t;
+        how = `ultima posizione a ${Math.round(distanceM(spot, g.from))} m dall'auto`;
+      }
+    }
+    if (backT === null) return false;
+    const veh = after(backT);
+    if (veh.length < cfg.GAP_MOVE_MIN_VEH_ACTS) return false;
+    const departT = veh[0];
+    const lastVehT = veh[veh.length - 1];
+
+    const parkingId = s.parkingId;
+    s.releasedLate = true;
+    m.departure = null;
+    m.departureCandidateSince = null;
+    m.nearDepartT = null;
+    m.nearReturnT = null;
+    m.arrivedInVehicle = false;
+    m.returnSeries = [];
+    m.farSince = null;
+    this.closeSession(departT, 'RELEASED', 0);
+    s.releaseConfidence = null;
+    this.transition(
+      'PARKING_RELEASED',
+      `partenza vista in ritardo: GPS assente per ${fmtDur(g.to.t - g.from.t)}; tornato all'auto (${how}), ` +
+        `poi ${veh.length} campioni IN_VEHICLE per ${fmtDur(lastVehT - departT)}; ora a ${(d / 1000).toFixed(1)} km dall'auto. ` +
+        `Partenza ${fmtDur(c.now - departT)} fa: posto non condiviso`,
+      c.now,
+      { parkingId, distanceM: Math.round(d), eventType: 'PARKING_RELEASED' },
+    );
+
+    const driving =
+      c.vehicleConfirmed ||
+      (c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) ||
+      (c.act !== null && c.act.activity === 'IN_VEHICLE');
+    if (driving) {
+      this.transition('VEHICLE_MOVING', 'in auto quando il GPS è tornato', c.now);
+      return true;
+    }
+    m.stopPhase = null;
+    const pt: GeoPoint = {
+      latitude: g.to.latitude,
+      longitude: g.to.longitude,
+      accuracyM: Math.max(cfg.NO_GPS_PARK_ACCURACY_M, g.to.accuracy),
+      fixes: 1,
+      spreadM: 0,
+    };
+    this.openSession(
+      c.now,
+      `arrivato durante il buco GPS (ultimo IN_VEHICLE ${fmtDur(c.now - lastVehT)} fa): ` +
+        `punto stimato dalla prima posizione dopo il buco`,
+      pt,
+    );
+    if (m.session) {
+      m.session.startT = lastVehT;
+      m.session.exitedOnFoot = true;
+      m.session.gpsLostAtPark = true;
+    }
+    return true;
   }
 
   /**

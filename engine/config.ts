@@ -125,6 +125,16 @@ export interface DetectionConfig {
   NO_GPS_PARK_ACCURACY_M: number;
   /** in quel caso la ripartenza può comparire fino a questa distanza dal punto stimato (m) */
   NO_GPS_DEPARTURE_RADIUS: number;
+  /** auto spostata durante un buco GPS (14/10 ore 15:46–17:58): buco minimo tra due posizioni valide (s) */
+  GAP_MOVE_MIN_GAP_S: number;
+  /** ...e distanza minima dall'auto quando il GPS torna (m) */
+  GAP_MOVE_MIN_DIST_M: number;
+  /** ...campioni IN_VEHICLE nel buco, dopo il ritorno all'auto, necessari */
+  GAP_MOVE_MIN_VEH_ACTS: number;
+  /** ...confidenza minima di quei campioni IN_VEHICLE */
+  GAP_MOVE_VEH_CONFIDENCE: number;
+  /** ...ritorno all'auto: ultima posizione nota prima degli IN_VEHICLE entro questa distanza (m) */
+  GAP_MOVE_AT_CAR_M: number;
   RETURN_MIN_APPROACH_TIME_S: number;
   RETURN_MIN_APPROACH_M: number;
   RETURN_MIN_CONFIDENCE: number;
@@ -289,6 +299,11 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   NO_GPS_PARK_MAX_GAP_S: 300,
   NO_GPS_PARK_ACCURACY_M: 60,
   NO_GPS_DEPARTURE_RADIUS: 500,
+  GAP_MOVE_MIN_GAP_S: 300,
+  GAP_MOVE_MIN_DIST_M: 2500,
+  GAP_MOVE_MIN_VEH_ACTS: 3,
+  GAP_MOVE_VEH_CONFIDENCE: 70,
+  GAP_MOVE_AT_CAR_M: 50,
   RETURN_MIN_APPROACH_TIME_S: 60,
   RETURN_MIN_APPROACH_M: 30,
   RETURN_MIN_CONFIDENCE: 70,

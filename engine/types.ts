@@ -187,6 +187,8 @@ export interface ParkingSession {
   exitedOnFoot?: boolean;
   /** GPS assente al momento del parcheggio (garage, parcheggio coperto): punto approssimato */
   gpsLostAtPark?: boolean;
+  /** partenza vista solo a posteriori (GPS assente durante il viaggio): il posto non va condiviso */
+  releasedLate?: boolean;
   /** sosta a un distributore di carburante (OpenStreetMap): non è un posto da condividere */
   atFuelStation?: boolean;
   /** ricerca del posto prima della sosta (sperimentale) */

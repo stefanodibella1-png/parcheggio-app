@@ -85,6 +85,8 @@ export class CommunityBridge {
     if (session.gpsLostAtPark) return;
     // rifornimento al distributore
     if (session.atFuelStation) return;
+    // partenza vista solo a posteriori (GPS assente): troppo tardi per avvisare
+    if (session.releasedLate) return;
     switch (e.type) {
       case 'RETURN_PREDICTED':
         await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now);
