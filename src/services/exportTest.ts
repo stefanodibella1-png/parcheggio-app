@@ -6,6 +6,8 @@ import { replay, normalizeInputs } from '../../engine/replay.ts';
 import { analyzeTestQuality } from '../../engine/analysis.ts';
 import { distanceM } from '../../engine/geo.ts';
 import * as db from '../storage/db.ts';
+import { deviceInfo } from './deviceInfo.ts';
+import { ActivityRecognition } from '../../modules/activity-recognition/index.ts';
 
 export const SCHEMA_VERSION = 2;
 
@@ -39,11 +41,17 @@ export async function buildExport(testId: string) {
       ? test.quality
       : analyzeTestQuality({ inputs, events, sessions, finalState: (test.finalState as never) ?? 'UNKNOWN', stoppedAt: test.stoppedAt, cfg: test.config });
   const exportedAt = Date.now();
+  // build installata adesso (il test può essere partito con una build più vecchia)
+  const installedBuild = deviceInfo().buildNumber ?? test.meta.buildNumber;
+  const serviceLog = (await ActivityRecognition.getServiceLog().catch(() => [])).filter(
+    (x) => x.t >= test.startedAt && x.t <= exportedAt,
+  );
   const json = {
     schemaVersion: SCHEMA_VERSION,
     app: 'PARCHEGGIO',
     appVersion: test.meta.appVersion,
-    buildNumber: test.meta.buildNumber,
+    buildNumber: installedBuild,
+    buildAtStart: test.meta.buildNumber,
     updateId: test.meta.updateId,
     runtimeVersion: test.meta.runtimeVersion,
     device: test.platform,
@@ -64,6 +72,7 @@ export async function buildExport(testId: string) {
     snapshots,
     reviewLabels: labels,
     qualityWarnings: quality,
+    serviceLog,
   };
   return { test, json, inputs, events, sessions };
 }

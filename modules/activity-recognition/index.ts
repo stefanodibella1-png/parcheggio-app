@@ -31,7 +31,11 @@ type NativeModuleShape = {
   stopLocationService?(): void;
   setLocationInterval?(intervalMs: number): boolean;
   locationServiceRunning?(): boolean;
+  getServiceLog?(): Promise<ServiceLogEntry[]>;
 };
+
+/** Android: avvii, morti e riavvii del servizio GPS (registro nativo su file). */
+export type ServiceLogEntry = { t: number; event: string; detail: string; build: string };
 
 export type NativeLocation = {
   t: number;
@@ -92,6 +96,9 @@ export const ActivityRecognition = {
   },
   async getBufferedLocations(): Promise<NativeLocation[]> {
     return typeof Native?.getBufferedLocations === 'function' ? Native.getBufferedLocations() : [];
+  },
+  async getServiceLog(): Promise<ServiceLogEntry[]> {
+    return typeof Native?.getServiceLog === 'function' ? Native.getServiceLog() : [];
   },
   addListener(cb: (a: NativeActivity) => void): Subscription {
     return Native ? Native.addListener('onActivity', cb) : { remove() {} };

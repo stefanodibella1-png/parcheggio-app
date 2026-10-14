@@ -114,6 +114,11 @@ class ActivityRecognitionModule : Module() {
     AsyncFunction("getBufferedLocations") {
       LocationBus.drain()
     }
+
+    // registro di avvii, morti e riavvii del servizio GPS (finisce nell'export)
+    AsyncFunction("getServiceLog") {
+      ServiceLog.read(context)
+    }
   }
 
   private fun hasPermission(): Boolean {

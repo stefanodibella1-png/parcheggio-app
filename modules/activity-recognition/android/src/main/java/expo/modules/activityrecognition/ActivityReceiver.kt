@@ -16,13 +16,21 @@ class ActivityReceiver : BroadcastReceiver() {
     if (!ActivityRecognitionResult.hasResult(intent)) return
     val result = ActivityRecognitionResult.extractResult(intent) ?: return
     val a = result.mostProbableActivity
-    // guardiano nativo: in auto ma il GPS tace da 2 minuti → si rifà la richiesta (anche con JS congelato)
-    val svc = LocationService.instance
-    if (svc != null && a.type == DetectedActivity.IN_VEHICLE && a.confidence >= 70 &&
-      System.currentTimeMillis() - LocationService.lastFixT > 120_000 &&
-      System.currentTimeMillis() - lastKick > 300_000) {
-      lastKick = System.currentTimeMillis()
-      svc.kick()
+    // guardiano nativo (anche con JS congelato): in auto e
+    // - servizio GPS morto → si riavvia (14/10: GPS muto 2 ore con IN_VEHICLE per 22 minuti);
+    // - servizio vivo ma GPS muto da 2 minuti → si rifà la richiesta.
+    if (a.type == DetectedActivity.IN_VEHICLE && a.confidence >= 70) {
+      val now = System.currentTimeMillis()
+      val svc = LocationService.instance
+      if (svc == null) {
+        if (now - lastRestart > 60_000) {
+          lastRestart = now
+          LocationService.restartIfDead(context, "in auto, confidenza ${a.confidence}")
+        }
+      } else if (now - LocationService.lastFixT > 120_000 && now - lastKick > 300_000) {
+        lastKick = now
+        svc.kick(if (LocationService.lastFixT > 0) (now - LocationService.lastFixT) / 1000 else -1L)
+      }
     }
     ActivityBus.emit(
       mapOf(
@@ -37,6 +45,7 @@ class ActivityReceiver : BroadcastReceiver() {
 
   companion object {
     @Volatile var lastKick = 0L
+    @Volatile var lastRestart = 0L
 
     fun map(type: Int): String = when (type) {
       DetectedActivity.IN_VEHICLE -> "IN_VEHICLE"
