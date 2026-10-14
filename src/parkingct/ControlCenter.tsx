@@ -213,6 +213,34 @@ function EarlyCommunity() {
   );
 }
 
+/** Esporta i dati di rilevamento di questo telefono (stesso formato di PARCHEGGIO), per le analisi. */
+function ExportData() {
+  const [busy, setBusy] = useState<number | null>(null);
+  const run = async (which: number) => {
+    setBusy(which);
+    try {
+      await host.flush(true);
+      const tests = await listTests();
+      const t = tests[which];
+      if (!t) Alert.alert('Nessun registro', which === 0 ? 'Non ci sono ancora dati su questo telefono.' : 'Non c\'è un registro precedente.');
+      else await shareExport(t.id, 'json');
+    } catch (e) {
+      Alert.alert('Esportazione non riuscita', String(e));
+    }
+    setBusy(null);
+  };
+  return (
+    <Card style={{ marginTop: space.md }}>
+      <Label bold>Esporta dati di questo telefono</Label>
+      <Label dim size={13}>
+        Il registro si rinnova ogni giorno: se il problema è di ieri, esporta anche il precedente.
+      </Label>
+      <Button title="Esporta registro di oggi" busy={busy === 0} style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => void run(0)} />
+      <Button small variant="ghost" title="Esporta registro precedente" busy={busy === 1} style={{ marginTop: space.sm }} onPress={() => void run(1)} />
+    </Card>
+  );
+}
+
 function Settings() {
   const [oldP, setOldP] = useState('');
   const [newP, setNewP] = useState('');
