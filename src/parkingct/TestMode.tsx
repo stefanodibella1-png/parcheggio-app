@@ -27,6 +27,8 @@ export async function getTestMode(): Promise<{ on: boolean; role: TestRole | nul
 
 /** Applica al motore la modalità prova: community accesa; chi cerca ascolta sempre. */
 export async function applyTestMode(launched: boolean): Promise<boolean> {
+  // dopo il lancio vero la prova non serve più: niente posti di prova tra gli utenti reali
+  if (launched) await setTestMode(false);
   const t = await getTestMode();
   if (t.on) host.setCommunityAllowed(true, t.role === 'cerca');
   else host.setCommunityAllowed(launched, false);
@@ -83,6 +85,18 @@ export function TestScreen({ onBack, onRoleChanged }: { onBack: () => void; onRo
       </View>
 
       {role === 'libera' ? <LiberaPanel /> : role === 'cerca' ? <CercaPanel /> : null}
+
+      <Button
+        variant="ghost"
+        title="⏪ Torna a oggi (esci dalla prova)"
+        style={{ marginTop: space.xl }}
+        onPress={async () => {
+          await setTestMode(false);
+          await applyTestMode(false);
+          onRoleChanged();
+          onBack();
+        }}
+      />
     </ScrollView>
   );
 }

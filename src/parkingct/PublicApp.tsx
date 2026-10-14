@@ -73,7 +73,7 @@ import { ControlCenter } from './ControlCenter.tsx';
 import { PREF_LABEL, getPref, setPref, type PrefKey } from '../services/prefs.ts';
 import { VersionNote } from '../ui/components/VersionNote.tsx';
 import { MapScreen } from './MapScreen.tsx';
-import { TestBadge, TestScreen, applyTestMode, getTestMode, type TestRole } from './TestMode.tsx';
+import { TestBadge, TestScreen, applyTestMode, getTestMode, setTestMode, type TestRole } from './TestMode.tsx';
 import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
@@ -435,7 +435,8 @@ function Home({
   }, [founder, cfg, invites, onInviteReward]);
 
   // modalità prova: l'app si comporta come dopo il lancio
-  const launched = (cfg ? now >= cfg.launchAt : false) || test.on;
+  const realLaunched = cfg ? now >= cfg.launchAt : false;
+  const launched = realLaunched || test.on;
   const testerLeft = testerLeftMs(founder, cfg, now);
   if (testerLeft !== null && testerLeft <= 0) return <TesterExpired cfg={cfg} go={go} />;
   const session = s.session;
@@ -496,7 +497,18 @@ function Home({
         />
       ) : null}
 
-      {test.on ? <TestBadge role={test.role} onPress={() => go('test')} /> : null}
+      {test.on && !realLaunched ? <TestBadge role={test.role} onPress={() => go('test')} /> : null}
+      {!test.on && !realLaunched ? (
+        <Button
+          title="⏩ Avanti nel tempo: prova ParkingCT come dopo il 1° dicembre"
+          variant="ghost"
+          style={{ marginTop: space.md }}
+          onPress={async () => {
+            await setTestMode(true);
+            go('test');
+          }}
+        />
+      ) : null}
       {launched ? <Button title="🗺️ Mappa dei posti" variant="ghost" style={{ marginTop: space.sm }} onPress={() => go('map')} /> : null}
 
       {/* stato in tempo reale (come in PARCHEGGIO) e auto */}
