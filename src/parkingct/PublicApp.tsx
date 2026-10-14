@@ -72,11 +72,12 @@ import {
 import { ControlCenter } from './ControlCenter.tsx';
 import { PREF_LABEL, getPref, setPref, type PrefKey } from '../services/prefs.ts';
 import { VersionNote } from '../ui/components/VersionNote.tsx';
+import { TestBadge, TestScreen, applyTestMode, getTestMode, type TestRole } from './TestMode.tsx';
 import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
 
-type Screen = 'home' | 'founder' | 'info' | 'admin' | 'wall';
+type Screen = 'home' | 'founder' | 'info' | 'admin' | 'wall' | 'test';
 
 // ---------------------------------------------------------------------------------------
 // radice
@@ -98,9 +99,8 @@ export function PublicApp() {
       Alert.alert('Codice attivo su un altro telefono', 'Il tuo codice ParkingCT è stato inserito su un altro telefono. Per usarlo di nuovo qui, inseriscilo nella pagina Fondatori.');
     }
     const launched = Date.now() >= conf.launchAt;
-    // telefono di prova (control center › ⚙︎): posti attivi già prima del lancio
-    const early = (await kvGet('pc:earlyCommunity').catch(() => null)) === '1';
-    host.setCommunityAllowed(launched || early, early && !launched);
+    // modalità prova (control center › ⚙︎): come dopo il lancio, con il ruolo scelto
+    await applyTestMode(launched);
     // Tester: promemoria per diventare fondatore finché si può (solo prima del lancio)
     const fi = await founderInfo();
     if (fi?.tier === 'tester' && !launched) void scheduleFounderReminders(conf.launchAt, Date.now());
@@ -176,6 +176,7 @@ export function PublicApp() {
   else if (screen === 'info') body = <InfoScreen onBack={() => setScreen('home')} />;
   else if (screen === 'wall') body = <WallScreen founder={founder} onBack={() => setScreen('home')} onJoin={() => setScreen('founder')} />;
   else if (screen === 'admin') body = <ControlCenter cfg={cfg} onBack={() => setScreen('home')} />;
+  else if (screen === 'test') body = <TestScreen onBack={() => setScreen('home')} onRoleChanged={() => void refreshCfg()} />;
   else
     body = (
       <Home
@@ -364,6 +365,10 @@ function Home({
   const [invites, setInvites] = useState<number | null>(null);
   const [parks, setParks] = useState<number | null>(null);
   const taps = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+  const [test, setTest] = useState<{ on: boolean; role: TestRole | null }>({ on: false, role: null });
+  useEffect(() => {
+    void getTestMode().then(setTest);
+  }, []);
 
   useEffect(() => {
     void updateAvailable().then(setUpd);
@@ -426,7 +431,8 @@ function Home({
     if (!founder?.honorary && cfg && cfg.inviteFreeAt > 0 && invites !== null && invites >= cfg.inviteFreeAt) onInviteReward();
   }, [founder, cfg, invites, onInviteReward]);
 
-  const launched = cfg ? now >= cfg.launchAt : false;
+  // modalità prova: l'app si comporta come dopo il lancio
+  const launched = (cfg ? now >= cfg.launchAt : false) || test.on;
   const testerLeft = testerLeftMs(founder, cfg, now);
   if (testerLeft !== null && testerLeft <= 0) return <TesterExpired cfg={cfg} go={go} />;
   const session = s.session;
@@ -486,6 +492,8 @@ function Home({
           }}
         />
       ) : null}
+
+      {test.on ? <TestBadge role={test.role} onPress={() => go('test')} /> : null}
 
       {/* stato in tempo reale (come in PARCHEGGIO) e auto */}
       <View style={{ marginTop: space.lg }}>

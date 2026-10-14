@@ -24,7 +24,8 @@ import {
 } from './admin.ts';
 import { checkName } from './moderation.ts';
 import { host } from '../host/EngineHost.ts';
-import { kvGet, kvSet, listTests } from '../storage/db.ts';
+import { listTests } from '../storage/db.ts';
+import { applyTestMode, getTestMode, setTestMode } from './TestMode.tsx';
 import { shareExport } from '../services/exportTest.ts';
 import { VersionNote } from '../ui/components/VersionNote.tsx';
 import { APK_URL, TIER_BADGE, euro, TIER_LABEL, fetchWall, type Ad, type PublicConfig, type Tier, type WallEntry } from './server.ts';
@@ -184,60 +185,30 @@ function Login({ onIn }: { onIn: () => void }) {
   );
 }
 
-/** Telefono di prova: vede e pubblica i posti già prima del 1° dicembre (solo su questo telefono). */
+/** Modalità prova: su questo telefono l'app funziona come dopo il lancio, con il ruolo scelto. */
 function EarlyCommunity() {
   const [on, setOn] = useState(false);
   useEffect(() => {
-    void kvGet('pc:earlyCommunity')
-      .catch(() => null)
-      .then((v) => setOn(v === '1'));
+    void getTestMode().then((t) => setOn(t.on));
   }, []);
   return (
     <Card style={{ marginTop: space.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flex: 1, paddingRight: space.sm }}>
-          <Label bold>Posti in anticipo su questo telefono</Label>
+          <Label bold>🧪 Modalità prova su questo telefono</Label>
           <Label dim size={13}>
-            Per le prove prima del lancio: questo telefono pubblica i posti che lascia e riceve quelli liberati entro 800 m, in qualunque momento. Gli altri utenti non vedono nulla fino al 1° dicembre.
+            L'app funziona come dopo il 1° dicembre. In home compare il pulsante viola «MODALITÀ PROVA» per scegliere se questo telefono libera il posto o lo cerca. Gli altri utenti non vedono nulla.
           </Label>
         </View>
         <Switch
           value={on}
           onValueChange={async (v) => {
             setOn(v);
-            await kvSet('pc:earlyCommunity', v ? '1' : '').catch(() => {});
-            host.setCommunityAllowed(v, v);
+            await setTestMode(v);
+            await applyTestMode(false);
           }}
         />
       </View>
-    </Card>
-  );
-}
-
-/** Esporta i dati di rilevamento di questo telefono (stesso formato di PARCHEGGIO), per le analisi. */
-function ExportData() {
-  const [busy, setBusy] = useState<number | null>(null);
-  const run = async (which: number) => {
-    setBusy(which);
-    try {
-      await host.flush(true);
-      const tests = await listTests();
-      const t = tests[which];
-      if (!t) Alert.alert('Nessun registro', which === 0 ? 'Non ci sono ancora dati su questo telefono.' : 'Non c\'è un registro precedente.');
-      else await shareExport(t.id, 'json');
-    } catch (e) {
-      Alert.alert('Esportazione non riuscita', String(e));
-    }
-    setBusy(null);
-  };
-  return (
-    <Card style={{ marginTop: space.md }}>
-      <Label bold>Esporta dati di questo telefono</Label>
-      <Label dim size={13}>
-        Il registro si rinnova ogni giorno: se il problema è di ieri, esporta anche il precedente.
-      </Label>
-      <Button title="Esporta registro di oggi" busy={busy === 0} style={{ marginTop: space.md, backgroundColor: RED }} onPress={() => void run(0)} />
-      <Button small variant="ghost" title="Esporta registro precedente" busy={busy === 1} style={{ marginTop: space.sm }} onPress={() => void run(1)} />
     </Card>
   );
 }

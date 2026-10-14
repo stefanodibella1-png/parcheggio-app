@@ -215,10 +215,15 @@ export class CommunityBridge {
           this.notified.set(s.id, s.kind);
           await notifyNearbySpot(s, now);
           // voce: la prima volta che il posto arriva (il cambio di stato lo dice la seconda voce a 300 m)
-          if (this.voiced.has(s.id)) continue;
+          const prev = this.voiced.get(s.id);
+          if (prev) {
+            // modalità prova (telefono fermo che cerca): anche il passaggio a "libero" si dice a voce
+            if (this.testListen && prev.spot.kind !== s.kind && (await getPref('voice'))) speak(this.spotPhrase(s, s.distanceM, now));
+            continue;
+          }
           const close = s.distanceM <= cfg.COMMUNITY_SECOND_VOICE_M;
           this.voiced.set(s.id, { n: close ? 2 : 1, spot: s, dists: [{ t: now, d: s.distanceM }] });
-          if (driving && (await getPref('voice'))) speak(this.spotPhrase(s, s.distanceM, now));
+          if ((driving || this.testListen) && (await getPref('voice'))) speak(this.spotPhrase(s, s.distanceM, now));
         }
         // stato aggiornato dei posti già annunciati (per la seconda voce)
         for (const s of list) {
