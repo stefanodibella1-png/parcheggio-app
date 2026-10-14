@@ -11,8 +11,9 @@ Lo scopo è rilevare in automatico, senza alcun input manuale, che l'utente parc
 
 ## Rilascio
 - **Aggiornamento JS** (motore, src, App.tsx): basta il push su `main`. Il workflow `update.yml` esegue `tsc --noEmit` e `expo export`: se fallisce, l'aggiornamento non parte. Poi fa `eas update` su entrambi i canali e scrive data e nota in `src/releaseNote.ts`.
-- **Nuova APK** (modifiche in `modules/`, `app.json`, `app.config.js`): il workflow `build-apk.yml` crea la release `build-N`, con versionCode = numero della run. L'app propone da sola l'installazione nuova (finestra + notifica). Ultima build: **20**.
-- Tutti i telefoni hanno runtime statico `"2"`.
+- **Nuova APK** (modifiche in `modules/`, `app.json`, `app.config.js`): il workflow `build-apk.yml` crea la release `build-N`, con versionCode = numero della run. L'app propone da sola l'installazione nuova (finestra + notifica). Ultima build: **21**.
+- Runtime **`"3"`** dalla build 21 (`app.json` + `runtime-android.txt`). Le build ≤20 (runtime 2) non ricevono più aggiornamenti: devono installare la 21.
+- **Mappa**: `src/parkingct/MapScreen.tsx` (MapLibre `@maplibre/maplibre-react-native` 11.4.0, stile OpenFreeMap liberty, nessuna chiave). **Filtri OSM**: `src/services/osmRules.ts` + soglie `OSM_*` in `engine/config.ts`; il controllo è in `bridge.share()`.
 - Altri workflow:
   - `firebase.yml`: regole Firestore e config;
   - `stats.yml`: numeri del control center;
@@ -58,7 +59,7 @@ Lo scopo è rilevare in automatico, senza alcun input manuale, che l'utente parc
 ## Da fare (in ordine)
 1. **Prova a due dispositivi** in Modalità prova (telefono LIBERA, tablet CERCA): prima la prova veloce con i pulsanti, poi quella vera in strada.
 2. **App definitiva** dai bozzetti approvati (artifact "ParkingCT – bozzetti app definitiva"). Schermate: Home Cerchi / La tua auto, Mappa, Tu, Impostazioni; barra in basso con 4 schede. Colori: verde = libero, arancione = si libera, rosso = brand e auto, blu = tu. Font Plus Jakarta Sans.
-3. **Mappa** con MapLibre + OpenFreeMap (senza chiave e senza carta; Stefano non ha una chiave Google Maps). Richiede una nuova APK. **Filtri OpenStreetMap**: divieti di sosta, passi carrabili, carico/scarico, isole pedonali → posti non condivisi; strisce blu e parcheggi → posti più affidabili.
+3. Mappa e filtri OSM **fatti nella build 21, da provare sul telefono**. Restano da fare: strisce blu e parcheggi come segnale di affidabilità; mappa nella barra in basso dell'app definitiva.
 4. **Sicurezza dei codici fondatore**, prima di Stripe reale:
    - oggi lo spostamento di un codice si fa con il solo `usedBy`, visibile nel muro;
    - i codici regalo sono in chiaro;
