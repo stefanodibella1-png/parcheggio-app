@@ -72,12 +72,13 @@ import {
 import { ControlCenter } from './ControlCenter.tsx';
 import { PREF_LABEL, getPref, setPref, type PrefKey } from '../services/prefs.ts';
 import { VersionNote } from '../ui/components/VersionNote.tsx';
+import { MapScreen } from './MapScreen.tsx';
 import { TestBadge, TestScreen, applyTestMode, getTestMode, type TestRole } from './TestMode.tsx';
 import { cancelFounderReminders, scheduleFounderReminders } from '../services/notifications.ts';
 
 const RED = '#E53935';
 
-type Screen = 'home' | 'founder' | 'info' | 'admin' | 'wall' | 'test';
+type Screen = 'home' | 'founder' | 'info' | 'admin' | 'wall' | 'test' | 'map';
 
 // ---------------------------------------------------------------------------------------
 // radice
@@ -177,6 +178,7 @@ export function PublicApp() {
   else if (screen === 'info') body = <InfoScreen onBack={() => setScreen('home')} />;
   else if (screen === 'wall') body = <WallScreen founder={founder} onBack={() => setScreen('home')} onJoin={() => setScreen('founder')} />;
   else if (screen === 'admin') body = <ControlCenter cfg={cfg} onBack={() => setScreen('home')} />;
+  else if (screen === 'map') body = <MapScreen onBack={() => setScreen('home')} />;
   else if (screen === 'test') body = <TestScreen onBack={() => setScreen('home')} onRoleChanged={() => void refreshCfg()} />;
   else
     body = (
@@ -495,6 +497,7 @@ function Home({
       ) : null}
 
       {test.on ? <TestBadge role={test.role} onPress={() => go('test')} /> : null}
+      {launched ? <Button title="🗺️ Mappa dei posti" variant="ghost" style={{ marginTop: space.sm }} onPress={() => go('map')} /> : null}
 
       {/* stato in tempo reale (come in PARCHEGGIO) e auto */}
       <View style={{ marginTop: space.lg }}>

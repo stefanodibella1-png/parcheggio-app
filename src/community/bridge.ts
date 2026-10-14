@@ -11,6 +11,7 @@ import { kvGet, kvSet } from '../storage/db.ts';
 import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
 import { distanceM } from '../../engine/geo.ts';
 import { publicId } from '../parkingct/server.ts';
+import { parkingRestriction } from '../services/osmRules.ts';
 
 export interface CommunityState {
   configured: boolean;
@@ -21,6 +22,8 @@ export interface CommunityState {
   /** il mio posto condiviso in questo momento */
   shared: { id: string; kind: SpotKind; freeAt: number } | null;
   error: string | null;
+  /** ultima nota sul posto (es. non condiviso per divieto di sosta) */
+  note?: string | null;
 }
 
 export class CommunityBridge {
@@ -137,6 +140,13 @@ export class CommunityBridge {
   private async share(session: ParkingSession, kind: SpotKind, freeAt: number, now: number): Promise<void> {
     const cfg = this.cfg();
     const p = session.spot.pointFinal;
+    // divieto di sosta, isola pedonale o passo carrabile (OpenStreetMap): era una fermata, non un posto
+    const rule = await parkingRestriction(p.latitude, p.longitude, now, cfg).catch(() => null);
+    if (rule) {
+      this.state.note = `Posto non condiviso: ${rule === 'driveway' ? 'passo carrabile' : rule === 'pedestrian' ? 'isola pedonale' : 'divieto di sosta'} (OpenStreetMap)`;
+      this.onChange();
+      return;
+    }
     const a = session.spot.address;
     const address = a?.street ? `${a.street}${a.streetNumber ? ` ${a.streetNumber}` : ''}` : (a?.formatted ?? null);
     const ttl = kind === 'FREED' ? cfg.COMMUNITY_FREED_TTL_S : cfg.COMMUNITY_SOON_TTL_S;

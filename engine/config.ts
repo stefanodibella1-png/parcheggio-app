@@ -92,6 +92,10 @@ export interface DetectionConfig {
   NEAR_RETURN_MIN_PARK_S: number;
   /** ritorno all'auto anche se il punto salvato è impreciso: ti fermi entro questa distanza dopo esserti avvicinato a piedi (m) */
   RETURN_STOP_RADIUS_M: number;
+  /** posto non condiviso se entro questa distanza da un'isola pedonale o da una strada con divieto di sosta (OpenStreetMap) (m) */
+  OSM_NOPARK_RADIUS_M: number;
+  /** posto non condiviso se entro questa distanza dall'imbocco di un passo carrabile (OpenStreetMap) (m) */
+  OSM_DRIVEWAY_RADIUS_M: number;
   /** quanto ti devi essere avvicinato negli ultimi minuti per contare come ritorno (m) */
   RETURN_STOP_APPROACH_M: number;
   /** da quanto devi essere fermo lì (s) */
@@ -265,6 +269,8 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   NEAR_RETURN_MIN_PARK_S: 600,
   // 14/10 ore 15:41: in auto, ma "a 50 m dall'auto" (punto salvato impreciso): nessun avviso
   RETURN_STOP_RADIUS_M: 70,
+  OSM_NOPARK_RADIUS_M: 8,
+  OSM_DRIVEWAY_RADIUS_M: 5,
   RETURN_STOP_APPROACH_M: 40,
   RETURN_STOP_STILL_S: 15,
   NEAR_RETURN_FROM_M: 12,
