@@ -42,6 +42,14 @@ service cloud.firestore {
       allow read, write: if exists(/databases/$(database)/documents/admin/key) && v == adminKey().v;
     }
 
+    // diagnostica: errori dell'app (solo scrittura; li legge il server con GitHub Actions)
+    match /crashes/{id} {
+      allow read: if false;
+      allow create, update: if request.resource.data.keys().hasOnly(['t', 'kind', 'app', 'build', 'update', 'os', 'msg', 'stack', 'extra'])
+        && request.resource.data.msg is string && request.resource.data.msg.size() <= 3000
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 3000;
+    }
+
     // posti che si liberano (community)
     match /spots/{id} {
       allow read: if true;

@@ -1,3 +1,6 @@
+// Diagnostica degli errori prima di tutto: se qualcosa si rompe all'avvio, lo sappiamo.
+import { installCrashHandler } from './src/services/crash.ts';
+installCrashHandler();
 // I task in background vanno registrati prima di tutto il resto.
 import './src/host/tasks.ts';
 import { AppRegistry } from 'react-native';

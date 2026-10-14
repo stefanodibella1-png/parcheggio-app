@@ -15,6 +15,7 @@ import { EventDetailScreen, ReviewScreen } from './src/ui/screens/ReviewScreens.
 import { IS_PUBLIC } from './src/variant.ts';
 import { PublicApp } from './src/parkingct/PublicApp.tsx';
 import { NewInstallPrompt } from './src/ui/components/NewInstallPrompt.tsx';
+import { ErrorBoundary } from './src/ui/components/ErrorBoundary.tsx';
 
 const TABS: { name: TabName; label: string; icon: string }[] = [
   { name: 'test', label: 'Test', icon: '●' },
@@ -113,8 +114,10 @@ function Root() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      {IS_PUBLIC ? <PublicApp /> : <Root />}
-      <NewInstallPrompt />
+      <ErrorBoundary>
+        {IS_PUBLIC ? <PublicApp /> : <Root />}
+        <NewInstallPrompt />
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

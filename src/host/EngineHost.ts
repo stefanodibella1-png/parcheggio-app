@@ -34,6 +34,7 @@ import {
 import { activityHistory, bufferedActivities, kickActivity, startActivity, stopActivity } from '../sensors/activity.ts';
 import { bufferedLocations, startLocationBackup, stopLocationBackup } from '../sensors/locationBackup.ts';
 import { newInstallAvailable } from '../services/appInstall.ts';
+import { report } from '../services/crash.ts';
 import { startMotion, stopMotion } from '../sensors/motion.ts';
 import { inMinutes, notifyEvent, notifyNewInstall, notifyWarning, setupNotifications, updateReturnNotification } from '../services/notifications.ts';
 import { reverseGeocode } from '../services/geocode.ts';
@@ -145,6 +146,7 @@ class Host {
   }
 
   private async init(): Promise<void> {
+    const t0 = Date.now();
     try {
       await setupNotifications();
       await this.community.init().catch(() => {});
@@ -160,7 +162,9 @@ class Host {
       if (active) await this.resume(active);
       this.state.ready = true;
       this.emitChange();
+      if (Date.now() - t0 > 5000) report('slow-start', new Error(`avvio motore ${Math.round((Date.now() - t0) / 1000)} s`), active ? active.id : '');
     } catch (e) {
+      report('init', e);
       this.state.error = String(e);
       this.state.ready = true;
       this.emitChange();
@@ -729,6 +733,7 @@ class Host {
       void this.retryGeocoding();
       console.log(`[rebuild] ${lateCount} input in ritardo, ${added.length} eventi nuovi`);
     } catch (e) {
+      report('rebuild', e);
       this.state.error = `Ricostruzione: ${String(e)}`;
     } finally {
       this.rebuilding = false;

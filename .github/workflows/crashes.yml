@@ -1,0 +1,30 @@
+name: Errori delle app (diagnostica)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ci/crashes.mjs'
+      - '.github/workflows/crashes.yml'
+
+jobs:
+  crashes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Leggi errori
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          export PROJECT_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project_id)" "$RUNNER_TEMP/sa.json")
+          mkdir -p "$RUNNER_TEMP/fb" && (cd "$RUNNER_TEMP/fb" && npm init -y >/dev/null && npm install google-auth-library@9 --no-audit --no-fund >/dev/null)
+          cp tools/ci/crashes.mjs "$RUNNER_TEMP/fb/" && node "$RUNNER_TEMP/fb/crashes.mjs"
