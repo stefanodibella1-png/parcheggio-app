@@ -1,6 +1,6 @@
 # PARCHEGGIO / ParkingCT — passaggio di consegne (14/10/2026)
 
-Leggi anche `CLAUDE.md` e `PARCHEGGIO_SPEC.md`. Utente: Stefano (Catania). Scrive in italiano, dal telefono. È impaziente: vuole risultati concreti, risposte brevi e fatti verificati, non ipotesi.
+Leggi anche `CLAUDE.md`, `PARCHEGGIO_SPEC.md` e **`docs/PIANO.md`** (decisioni dopo l'audit e promemoria da ricordare a Stefano). Utente: Stefano (Catania). Scrive in italiano, dal telefono. È impaziente: vuole risultati concreti, risposte brevi e fatti verificati, non ipotesi.
 
 ## Cos'è
 Due app dallo stesso codice (Expo SDK 54, RN 0.81, repo `stefanodibella1-png/parcheggio-app`, branch `main`):
