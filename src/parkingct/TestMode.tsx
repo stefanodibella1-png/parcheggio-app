@@ -11,7 +11,7 @@ import { publishSpot, withdrawSpot } from '../community/community.ts';
 import { simulateSpot, type SimStep } from '../services/simulateSpot.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
 import { Button, Card, Label } from '../ui/components/basics.tsx';
-import { useHost, useNow } from '../ui/components/live.tsx';
+import { navigateTo, useHost, useNow } from '../ui/components/live.tsx';
 import { space, usePalette } from '../ui/theme.ts';
 
 export type TestRole = 'libera' | 'cerca';
@@ -220,6 +220,7 @@ function CercaPanel() {
               <Label size={15} style={{ marginTop: 2 }}>
                 🅿️ {p.address ?? 'Posto'} · {p.distanceM} m
               </Label>
+              <Button title="🧭 Portami lì" style={{ marginTop: space.sm, backgroundColor: p.kind === 'FREED' ? GREEN : BLUE }} onPress={() => navigateTo(p.latitude, p.longitude)} />
             </View>
           ))
         )}

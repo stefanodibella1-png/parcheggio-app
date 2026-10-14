@@ -269,6 +269,14 @@ export function SensorLine({ rates, now }: { rates: HostState['rates']; now: num
 }
 
 /** Community: posti vicini quando stai cercando, e il tuo posto condiviso. */
+/** Navigazione fino al posto con Google Maps (traffico compreso), senza chiavi né costi. */
+export function navigateTo(lat: number, lon: number): void {
+  const app = `google.navigation:q=${lat},${lon}&mode=d`;
+  const web = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`;
+  if (Platform.OS === 'android') void Linking.openURL(app).catch(() => Linking.openURL(web).catch(() => {}));
+  else void Linking.openURL(web).catch(() => {});
+}
+
 export function CommunityCard({ community, now }: { community: HostState['community']; now: number }) {
   const c = usePalette();
   if (!community.configured) {
@@ -297,9 +305,12 @@ export function CommunityCard({ community, now }: { community: HostState['commun
             <Label dim size={13} style={{ marginTop: 4 }}>Nessun posto in arrivo vicino a te{community.lastSyncT ? ` · controllato ${ago(community.lastSyncT, now)}` : ''}</Label>
           ) : (
             community.nearby.slice(0, 5).map((s) => (
-              <Label key={s.id} size={14} style={{ marginTop: 4 }}>
-                🅿️ {s.address ?? 'Posto'} · {s.kind === 'FREED' ? 'libero' : `tra ~${mins(s.freeAt)} min`} · {s.distanceM} m
-              </Label>
+              <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                <Label size={14} style={{ flex: 1 }}>
+                  🅿️ {s.address ?? 'Posto'} · {s.kind === 'FREED' ? 'libero' : `tra ~${mins(s.freeAt)} min`} · {s.distanceM} m
+                </Label>
+                <Button small title="Portami lì" onPress={() => navigateTo(s.latitude, s.longitude)} />
+              </View>
             ))
           )}
         </>
