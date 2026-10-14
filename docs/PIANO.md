@@ -10,8 +10,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 4. ✅ **Prova a due telefoni** (dopo GPS promosso + ruolo CERCA in PARCHEGGIO): telefono in tasca parcheggia, si allontana 200–300 m, torna e riparte; tablet in ruolo CERCA a 300–500 m. Riuscita = "si libera tra N min" PRIMA della partenza + "libero ora" alla partenza, voce e notifica. 10 riuscite di fila (se una fallisce: analisi export e si riparte da zero). Luoghi diversi: casa, Etnapolis esterno, centro. **Stefano esegue, Claude gli dice quando.**
 
+5. ✅ **Misure**: precisione ≥ 9/10 avvisi "si libera" veri; copertura ≥ 6/10 partenze con avviso prima; anticipo mediano ≥ 1 min. Valide solo su ≥ 30 partenze reali. Stefano fa la revisione in Risultati (2–3 min a giornata); Claude calcola i numeri da ogni export e glieli dice.
+
 ## Decisioni ancora da prendere
-5. Misure di affidabilità (precisione ≥ 90 %, copertura ≥ 60 %, anticipo mediano ≥ 60 s).
 6. Sicurezza Firestore.
 7. Pagamenti / fondatori / inviti (proposta: niente incassi prima della prova).
 8. Privacy / GDPR.
@@ -29,6 +30,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | F | Usare la **revisione** in Risultati (corretto / sbagliato / mancato) su ogni test | Ogni volta che manda un export |
 | G | **Schermata guidata batteria per marca** (Xiaomi, Samsung, Oppo/Realme, Huawei, OnePlus, Motorola, Pixel) | Prima della prova in microzona |
 | I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
+| J | **Strumento metriche** `tools/metrics.ts` (precisione, copertura, anticipo da export + revisioni) — lavoro per un agente, solo cartella tools/ | Subito, in parallelo |
 | H | Verificare se i pacchetti fondatore sono **acquistabili** oggi in ParkingCT | Alla decisione 7 |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
