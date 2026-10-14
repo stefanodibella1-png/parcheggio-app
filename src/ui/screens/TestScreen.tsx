@@ -243,6 +243,7 @@ export function TestScreen({ nav }: { nav: Nav }) {
                 style={{ marginTop: space.sm }}
                 onPress={() => void host.setSearchRole(!host.searchRole)}
               />
+              {host.searchRole ? <SearchAlive community={s.community} now={now} /> : null}
             </Card>
             <View style={{ marginTop: space.md }}>
               <CommunityCard community={s.community} now={now} />
@@ -273,6 +274,35 @@ export function TestScreen({ nav }: { nav: Nav }) {
           <Button title="AVVIA TEST" busy={busy} disabled={!s.ready || blocking.length > 0} onPress={start} style={{ minHeight: 64 }} />
         )}
       </View>
+    </View>
+  );
+}
+
+/** Ruolo CERCA: a colpo d'occhio se il tablet è vivo e cosa ha ricevuto per ultimo. */
+function SearchAlive({ community, now }: { community: ReturnType<typeof useHost>['community']; now: number }) {
+  const c = usePalette();
+  const ago = community.lastSyncT ? Math.max(0, Math.round((now - community.lastSyncT) / 1000)) : null;
+  const alive = community.listening && ago !== null && ago <= 60;
+  const last = community.lastReceived ?? null;
+  const lastAgo = last ? Math.max(0, Math.round((now - last.t) / 60000)) : null;
+  return (
+    <View style={{ marginTop: space.md }}>
+      <Text style={{ color: alive ? c.ok : c.danger, fontSize: 24, fontWeight: '800' }}>
+        {alive
+          ? `In ascolto ✓ · ultimo controllo ${ago} s fa`
+          : !community.listening
+            ? '⚠️ Non in ascolto'
+            : ago === null
+              ? 'Primo controllo in corso…'
+              : `⚠️ Fermo · ultimo controllo ${ago} s fa`}
+      </Text>
+      {community.error ? <Label color={c.danger} size={14} style={{ marginTop: 4 }}>{community.error}</Label> : null}
+      <Text style={{ color: c.text, fontSize: 20, fontWeight: '700', marginTop: space.sm }}>
+        {last
+          ? `Ultimo avviso: ${last.kind === 'FREED' ? '✅ LIBERO' : '⏱️ SI LIBERA'} · ${last.distanceM} m · ${lastAgo === 0 ? 'adesso' : `${lastAgo} min fa`}`
+          : 'Nessun avviso ricevuto finora'}
+      </Text>
+      {last?.address ? <Label size={15} style={{ marginTop: 2 }}>🅿️ {last.address}</Label> : null}
     </View>
   );
 }

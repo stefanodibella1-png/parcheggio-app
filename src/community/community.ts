@@ -109,24 +109,41 @@ async function call(url: string, init: RequestInit, timeoutMs = 10_000): Promise
 
 // ---- operazioni ---------------------------------------------------------------
 
-/** Pubblica (o aggiorna) un posto. true = salvato sul server. */
-export async function publishSpot(spot: Omit<SharedSpot, 'geohash6'>): Promise<boolean> {
+/** Esito di un invio al server: status null = nessuna risposta (rete assente o lenta). */
+export interface SendResult {
+  ok: boolean;
+  status: number | null;
+}
+
+/** Pubblica (o aggiorna) un posto, con l'esito dettagliato (registro di invio). */
+export async function publishSpotDetailed(spot: Omit<SharedSpot, 'geohash6'>): Promise<SendResult> {
   const b = base();
-  if (!b) return false;
+  if (!b) return { ok: false, status: null };
   const full: SharedSpot = { ...spot, geohash6: encode(spot.latitude, spot.longitude, 6) };
   const r = await call(`${b}/spots/${encodeURIComponent(spot.id)}?${keyParam()}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: toFields({ ...full }) }),
   });
-  return !!r && r.ok;
+  return { ok: !!r && r.ok, status: r ? r.status : null };
+}
+
+/** Pubblica (o aggiorna) un posto. true = salvato sul server. */
+export async function publishSpot(spot: Omit<SharedSpot, 'geohash6'>): Promise<boolean> {
+  return (await publishSpotDetailed(spot)).ok;
+}
+
+/** Ritira un posto, con l'esito dettagliato. */
+export async function withdrawSpotDetailed(id: string): Promise<SendResult> {
+  const b = base();
+  if (!b) return { ok: false, status: null };
+  const r = await call(`${b}/spots/${encodeURIComponent(id)}?${keyParam()}`, { method: 'DELETE' });
+  return { ok: !!r && r.ok, status: r ? r.status : null };
 }
 
 /** Ritira un posto (previsione annullata, rilascio incerto). */
 export async function withdrawSpot(id: string): Promise<void> {
-  const b = base();
-  if (!b) return;
-  await call(`${b}/spots/${encodeURIComponent(id)}?${keyParam()}`, { method: 'DELETE' });
+  await withdrawSpotDetailed(id);
 }
 
 /**

@@ -47,9 +47,16 @@ async function receivedAlerts(fromT: number, toT: number) {
     };
   });
   const listenLog = log
-    .filter((e) => e.type !== 'alert' && inTest(e.t))
+    .filter((e) => (e.type === 'listen' || e.type === 'gap') && inTest(e.t))
     .map((e) => ({ ...e, ora: hhmmss(e.t) }));
-  return { alertsReceived, listenLog };
+  // telefono che libera: pubblicati, ritirati e NON pubblicati con il motivo
+  const alertsSent = log
+    .filter((e) => e.type === 'sent' && inTest(e.t))
+    .map((e) => {
+      const x = e as Extract<AlertLogEntry, { type: 'sent' }>;
+      return { t: x.t, ora: hhmmss(x.t), action: x.action, published: x.ok, reason: x.reason, event: x.event, spotId: x.id, freeAt: x.freeAt ?? null };
+    });
+  return { alertsReceived, listenLog, alertsSent };
 }
 
 export const SCHEMA_VERSION = 2;
@@ -89,7 +96,7 @@ export async function buildExport(testId: string) {
   const serviceLog = (await ActivityRecognition.getServiceLog().catch(() => [])).filter(
     (x) => x.t >= test.startedAt && x.t <= exportedAt,
   );
-  const { alertsReceived, listenLog } = await receivedAlerts(test.startedAt, exportedAt);
+  const { alertsReceived, listenLog, alertsSent } = await receivedAlerts(test.startedAt, exportedAt);
   const json = {
     schemaVersion: SCHEMA_VERSION,
     app: 'PARCHEGGIO',
@@ -117,6 +124,7 @@ export async function buildExport(testId: string) {
     reviewLabels: labels,
     qualityWarnings: quality,
     serviceLog,
+    alertsSent,
     alertsReceived,
     listenLog,
   };

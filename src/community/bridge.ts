@@ -8,7 +8,7 @@ import { notifyNearbySpot } from '../services/notifications.ts';
 import { getPref } from '../services/prefs.ts';
 import { speak } from '../services/voice.ts';
 import { kvGet, kvSet } from '../storage/db.ts';
-import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpot, type NearbySpot, type SpotKind } from './community.ts';
+import { communityConfigured, fetchNearby, publishSpotDetailed, recordTaken, withdrawSpotDetailed, type NearbySpot, type SendResult, type SpotKind } from './community.ts';
 import { distanceM } from '../../engine/geo.ts';
 import { publicId } from '../parkingct/server.ts';
 import { parkingRestriction } from '../services/osmRules.ts';
@@ -23,7 +23,13 @@ const LISTEN_GAP_MS = 60_000;
 export type AlertLogEntry =
   | { t: number; type: 'alert'; id: string; kind: SpotKind; distanceM: number; freeAt: number; alerted: boolean }
   | { t: number; type: 'listen'; on: boolean }
-  | { t: number; type: 'gap'; fromT: number; durS: number };
+  | { t: number; type: 'gap'; fromT: number; durS: number }
+  /** telefono che libera: cosa è stato pubblicato o ritirato, e cosa NON è stato pubblicato e perché */
+  | { t: number; type: 'sent'; id: string; action: SpotKind | 'WITHDRAWN'; ok: boolean; reason: string | null; event: string; freeAt?: number };
+
+function failReason(r: SendResult): string {
+  return r.status === null ? 'errore di rete (nessuna risposta dal server)' : `rifiutato dal server (HTTP ${r.status})`;
+}
 
 export interface CommunityState {
   configured: boolean;
@@ -36,6 +42,8 @@ export interface CommunityState {
   error: string | null;
   /** ultima nota sul posto (es. non condiviso per divieto di sosta) */
   note?: string | null;
+  /** PARCHEGGIO, ruolo CERCA: ultimo avviso ricevuto */
+  lastReceived?: { t: number; kind: SpotKind; distanceM: number; address: string | null } | null;
 }
 
 export class CommunityBridge {
@@ -111,46 +119,58 @@ export class CommunityBridge {
   // ---- chi libera ---------------------------------------------------------------
 
   async onEvent(e: DetectionEvent, session: ParkingSession | null, ri: ReturnInfo | null, now: number): Promise<void> {
-    if (!this.state.configured || !session) return;
+    // registro di invio: per gli eventi che dovrebbero pubblicare, si scrive anche perché non si pubblica
+    const wanted: SpotKind | null =
+      e.type === 'RETURN_PREDICTED' ||
+      (e.type === 'USER_RETURNING' && (e.from === 'PARKED_USER_AWAY' || e.from === 'RETURN_PREDICTED' || e.from === 'PARKED'))
+        ? 'SOON'
+        : e.type === 'PARKING_RELEASED' || e.type === 'PARKING_RELEASED_INFERRED'
+          ? 'FREED'
+          : null;
+    const skip = (reason: string) => {
+      if (wanted) this.addLog([{ t: now, type: 'sent', id: session?.parkingId ?? e.parkingId ?? '?', action: wanted, ok: false, reason, event: e.type }]);
+    };
+    if (!this.state.configured) return skip('comunità spenta');
+    if (!session) return skip('nessun parcheggio associato all\'evento');
     const id = session.parkingId;
     // chi cercava ha parcheggiato proprio su un posto ricevuto: conferma automatica che il posto è vero
     if (e.type === 'PARKED') await this.checkTaken(session, now);
     // solo posti veri: l'utente è sceso dall'auto (non code o attese in doppia fila)
-    if (!session.exitedOnFoot && !session.inferred) return;
+    if (!session.exitedOnFoot && !session.inferred) return skip('non sei sceso dall\'auto (coda o attesa in doppia fila)');
     // sosta breve: probabile doppia fila o fermata veloce (a Catania frequentissime)
     if (!session.inferred && session.parkedT !== null) {
       const parkedS = ((e.type === 'PARKING_RELEASED' ? e.t : now) - session.parkedT) / 1000;
-      if (parkedS < this.cfg().COMMUNITY_MIN_PARK_S) return;
+      if (parkedS < this.cfg().COMMUNITY_MIN_PARK_S) return skip(`sosta breve (${Math.round(parkedS)} s < ${this.cfg().COMMUNITY_MIN_PARK_S} s)`);
     }
     // garage o parcheggio coperto: non è un posto su strada
-    if (session.gpsLostAtPark) return;
+    if (session.gpsLostAtPark) return skip('dati scarsi: punto approssimato (GPS assente al parcheggio, garage o sotterraneo)');
     // rifornimento al distributore
-    if (session.atFuelStation) return;
+    if (session.atFuelStation) return skip('distributore di carburante');
     // partenza vista solo a posteriori (GPS assente): troppo tardi per avvisare
-    if (session.releasedLate) return;
+    if (session.releasedLate) return skip('dati scarsi: partenza vista in ritardo (GPS assente durante il viaggio)');
     switch (e.type) {
       case 'RETURN_PREDICTED':
-        await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now);
+        await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now, e.type);
         break;
       case 'USER_RETURNING':
         // anche da PARKED: sei arrivato all'auto da casa o dal negozio lì davanti
         if (e.from === 'PARKED_USER_AWAY' || e.from === 'RETURN_PREDICTED' || e.from === 'PARKED') {
-          await this.share(session, 'SOON', now + this.cfg().RETURN_DEPART_DELAY_S * 1000, now);
+          await this.share(session, 'SOON', now + this.cfg().RETURN_DEPART_DELAY_S * 1000, now, e.type);
         }
         break;
       case 'PARKING_RELEASED':
       case 'PARKING_RELEASED_INFERRED':
-        await this.share(session, 'FREED', e.t, now);
+        await this.share(session, 'FREED', e.t, now, e.type);
         break;
       case 'PARKED_USER_AWAY':
-        if ((e.from === 'RETURN_PREDICTED' || e.from === 'USER_RETURNING') && this.state.shared?.id === id) await this.withdraw(id);
+        if ((e.from === 'RETURN_PREDICTED' || e.from === 'USER_RETURNING') && this.state.shared?.id === id) await this.withdraw(id, e.type, now);
         break;
       case 'PARKED':
         // eri all'auto ma non sei ripartito
-        if (e.from === 'USER_RETURNING' && this.state.shared?.id === id && this.state.shared.kind === 'SOON') await this.withdraw(id);
+        if (e.from === 'USER_RETURNING' && this.state.shared?.id === id && this.state.shared.kind === 'SOON') await this.withdraw(id, e.type, now);
         break;
       case 'LOW_CONFIDENCE':
-        if (e.from === 'VEHICLE_DEPARTED' && this.state.shared?.id === id) await this.withdraw(id);
+        if (e.from === 'VEHICLE_DEPARTED' && this.state.shared?.id === id) await this.withdraw(id, e.type, now);
         break;
       default:
         break;
@@ -162,7 +182,7 @@ export class CommunityBridge {
     if (!this.state.configured || !session || !ri || ri.releaseEtaS === null) return;
     if (this.state.shared?.id !== session.parkingId || this.state.shared.kind !== 'SOON') return;
     if (now - this.lastSoonPush < 30_000) return;
-    await this.share(session, 'SOON', now + ri.releaseEtaS * 1000, now);
+    await this.share(session, 'SOON', now + ri.releaseEtaS * 1000, now, 'aggiornamento orario', true);
   }
 
   private async checkTaken(session: ParkingSession, now: number): Promise<void> {
@@ -180,13 +200,15 @@ export class CommunityBridge {
     }
   }
 
-  private async share(session: ParkingSession, kind: SpotKind, freeAt: number, now: number): Promise<void> {
+  private async share(session: ParkingSession, kind: SpotKind, freeAt: number, now: number, event = '', quiet = false): Promise<void> {
     const cfg = this.cfg();
     const p = session.spot.pointFinal;
     // divieto di sosta, isola pedonale o passo carrabile (OpenStreetMap): era una fermata, non un posto
     const rule = await parkingRestriction(p.latitude, p.longitude, now, cfg).catch(() => null);
     if (rule) {
-      this.state.note = `Posto non condiviso: ${rule === 'driveway' ? 'passo carrabile' : rule === 'pedestrian' ? 'isola pedonale' : 'divieto di sosta'} (OpenStreetMap)`;
+      const what = rule === 'driveway' ? 'passo carrabile' : rule === 'pedestrian' ? 'isola pedonale' : 'divieto di sosta';
+      this.state.note = `Posto non condiviso: ${what} (OpenStreetMap)`;
+      if (!quiet) this.addLog([{ t: now, type: 'sent', id: session.parkingId, action: kind, ok: false, reason: `filtro OSM: ${what}`, event }]);
       this.onChange();
       return;
     }
@@ -194,7 +216,7 @@ export class CommunityBridge {
     const address = a?.street ? `${a.street}${a.streetNumber ? ` ${a.streetNumber}` : ''}` : (a?.formatted ?? null);
     const ttl = kind === 'FREED' ? cfg.COMMUNITY_FREED_TTL_S : cfg.COMMUNITY_SOON_TTL_S;
     this.lastSoonPush = now;
-    const ok = await publishSpot({
+    const res = await publishSpotDetailed({
       id: session.parkingId,
       kind,
       latitude: p.latitude,
@@ -207,13 +229,18 @@ export class CommunityBridge {
       expiresAt: Math.max(freeAt, now) + ttl * 1000,
       deviceId: publicId(this.deviceId, now),
     });
+    const ok = res.ok;
+    if (!quiet || !ok) {
+      this.addLog([{ t: now, type: 'sent', id: session.parkingId, action: kind, ok, reason: ok ? null : failReason(res), event, freeAt }]);
+    }
     this.state.shared = ok ? { id: session.parkingId, kind, freeAt } : this.state.shared;
     this.state.error = ok ? null : 'Community: invio non riuscito (rete?)';
     this.onChange();
   }
 
-  private async withdraw(id: string): Promise<void> {
-    await withdrawSpot(id);
+  private async withdraw(id: string, event: string, now: number): Promise<void> {
+    const res = await withdrawSpotDetailed(id);
+    this.addLog([{ t: now, type: 'sent', id, action: 'WITHDRAWN', ok: res.ok, reason: res.ok ? null : failReason(res), event }]);
     if (this.state.shared?.id === id) this.state.shared = null;
     this.onChange();
   }
@@ -266,6 +293,11 @@ export class CommunityBridge {
           fresh.push({ t: now, type: 'alert', id: s.id, kind: s.kind, distanceM: s.distanceM, freeAt: s.freeAt, alerted: top2.has(s.id) && this.notified.get(s.id) !== s.kind });
         }
         this.addLog(fresh);
+        if (!IS_PUBLIC && fresh.length > 0) {
+          const near = [...fresh].sort((a, b) => (a.type === 'alert' && b.type === 'alert' ? a.distanceM - b.distanceM : 0))[0];
+          const sp = near && near.type === 'alert' ? list.find((x) => x.id === near.id) : undefined;
+          if (sp) this.state.lastReceived = { t: now, kind: sp.kind, distanceM: sp.distanceM, address: sp.address };
+        }
         for (const s of list) this.received.set(s.id, { spot: s, t: now });
         // posti annunciati a voce e poi spariti (ritirati, presi, scaduti) mentre ti avvicinavi
         const ids = new Set(list.map((x) => x.id));
