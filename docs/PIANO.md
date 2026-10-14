@@ -12,8 +12,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 5. ✅ **Misure**: precisione ≥ 9/10 avvisi "si libera" veri; copertura ≥ 6/10 partenze con avviso prima; anticipo mediano ≥ 1 min. Valide solo su ≥ 30 partenze reali. Stefano fa la revisione in Risultati (2–3 min a giornata); Claude calcola i numeri da ogni export e glieli dice.
 
+6. ✅ **Sicurezza Firestore**: accesso anonimo Firebase (identità invisibile, serve aggiornamento app → coordinare con la build GPS); ognuno modifica/ritira solo i propri posti; rifiuto coordinate fuori Catania e provincia, dati malformati, orari assurdi; scadenza automatica 15 min; limite di frequenza per telefono; test automatici d'attacco a ogni modifica. Lavoro per un agente.
+
 ## Decisioni ancora da prendere
-6. Sicurezza Firestore.
 7. Pagamenti / fondatori / inviti (proposta: niente incassi prima della prova).
 8. Privacy / GDPR.
 9. Google Play (proposta: aprire l'account subito; i 12 tester × 14 giorni = tester della microzona).
@@ -31,7 +32,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | G | **Schermata guidata batteria per marca** (Xiaomi, Samsung, Oppo/Realme, Huawei, OnePlus, Motorola, Pixel) | Prima della prova in microzona |
 | I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
 | J | **Strumento metriche** `tools/metrics.ts` (precisione, copertura, anticipo da export + revisioni) — lavoro per un agente, solo cartella tools/ | Subito, in parallelo |
-| H | Verificare se i pacchetti fondatore sono **acquistabili** oggi in ParkingCT | Alla decisione 7 |
+| H | ✓ 14/10: pacchetti fondatore **NON acquistabili** (link Stripe vuoti, nessuna chiave Stripe) | fatto |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
 1. Grafica definitiva dai bozzetti (Home, La tua auto, Mappa, Tu, Impostazioni)
