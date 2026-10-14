@@ -175,7 +175,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 4;
+export const ENGINE_LOGIC = 5;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -1149,6 +1149,22 @@ export class DetectionEngine {
     return median >= cfg.NEAR_RETURN_FROM_M;
   }
 
+  /** dall'istante indicato c'è stato un movimento da veicolo (velocità o activity IN_VEHICLE affidabile) */
+  private vehicleMoveSince(since: number): boolean {
+    const m = this.m;
+    const fast = m.fixes.some((f) => f.t >= since - 5000 && f.speed !== null && f.speed * 3.6 >= 12);
+    const veh = m.vehActT.filter((t) => t >= since - 30_000).length >= 1;
+    return fast || veh;
+  }
+
+  /** in auto (activity IN_VEHICLE affidabile e ripetuta) vicino al posto: stai per partire */
+  private inCarNearSpot(c: Ctx, d: number | null): boolean {
+    const m = this.m;
+    if (d === null || d > this.cfg.RETURN_STOP_RADIUS_M * 2) return false;
+    const veh = m.vehActT.filter((t) => t <= c.now && c.now - t <= 60_000).length;
+    return veh >= 2 && m.lastValidActivity?.activity === 'IN_VEHICLE';
+  }
+
   private stoppedAfterApproach(c: Ctx): boolean {
     const cfg = this.cfg;
     const m = this.m;
@@ -1206,6 +1222,13 @@ export class DetectionEngine {
     }
     if (!c.vehicleConfirmed && c.kmh !== null && c.kmh <= cfg.WALKING_SPEED_MAX) m.awayVehicleLogged = false;
 
+    // Sei in auto vicino al posto (il sistema dice IN_VEHICLE) ma non ti stai ancora muovendo: si libera a breve
+    if (d !== null && d > cfg.RETURN_RADIUS && (c.kmh === null || c.kmh <= cfg.WALKING_SPEED_MAX) && this.inCarNearSpot(c, d)) {
+      m.arrivedInVehicle = false;
+      m.nearReturnT = c.now;
+      this.transition('USER_RETURNING', `in auto a ${d} m dal posto: partenza probabile a breve`, c.now);
+      return;
+    }
     // Ritorno anche con il punto dell'auto impreciso: ti sei avvicinato a piedi e ti sei fermato
     // vicino (sei salito in auto). Prima serviva arrivare entro 20 m dal punto salvato.
     if (d !== null && d > cfg.RETURN_RADIUS && d <= cfg.RETURN_STOP_RADIUS_M && this.stoppedAfterApproach(c)) {
@@ -1282,6 +1305,24 @@ export class DetectionEngine {
       return;
     }
     if (c.now - since >= cfg.DEPARTURE_CANDIDATE_TIMEOUT_S * 1000) {
+      // Auto spostata di poco (manovra, posto accanto): ci si è mossi a velocità da veicolo e ora si è
+      // di nuovo fermi a meno di MIN_DEPARTURE_DISTANCE. Il posto diventa quello nuovo; prima l'app
+      // pensava che fossi sceso a piedi (14/10 ore 15:16: "lontano 35 m" e poi "50 m" stando in auto).
+      if (d !== null && d > cfg.AWAY_DISTANCE && d <= cfg.MIN_DEPARTURE_DISTANCE * 2.5 && c.stationary && this.vehicleMoveSince(since) && m.session) {
+        const recent = m.fixes.filter((f) => c.now - f.t <= 20_000);
+        const p = stabilizedPoint(recent.length >= 2 ? recent : m.fixes.slice(-3));
+        if (p) {
+          const fresh = this.makeSpot(p, p);
+          m.session.spot.pointAtPark = fresh.pointAtPark;
+          m.session.spot.pointFinal = fresh.pointFinal;
+          m.session.spot.pointQuality = fresh.pointQuality;
+          m.session.spot.geocodeStatus = 'PENDING';
+          m.session.spot.address = null;
+          m.returnSeries = [];
+          this.transition('PARKED', `auto spostata di ${d} m: nuovo punto di parcheggio`, c.now);
+          return;
+        }
+      }
       if (d !== null && d > cfg.AWAY_DISTANCE) {
         m.returnSeries = [];
         this.transition('PARKED_USER_AWAY', `nessuna partenza confermata in ${cfg.DEPARTURE_CANDIDATE_TIMEOUT_S} s, a ${d} m dall'auto`, c.now);
