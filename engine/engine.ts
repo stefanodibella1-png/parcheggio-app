@@ -91,6 +91,8 @@ interface Memory {
   coarse: LocationSample[];
   /** ultima volta che un movimento è partito vicino all'auto (DEPARTURE_CANDIDATE) */
   nearDepartT: number | null;
+  /** arrivato all'auto da vicino (casa/negozio): istante, per non ripetere e per il ritiro */
+  nearReturnT: number | null;
   /** arrivato vicino all'auto già in movimento su un veicolo (non a piedi) */
   arrivedInVehicle: boolean;
   steps: { t: number; steps: number }[]; // ultimi 20 s
@@ -173,7 +175,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 2;
+export const ENGINE_LOGIC = 3;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -203,6 +205,7 @@ export class DetectionEngine {
       vehActT: [],
       coarse: [],
       nearDepartT: null,
+      nearReturnT: null,
       arrivedInVehicle: false,
       steps: [],
       hasMotion: false,
@@ -1033,6 +1036,17 @@ export class DetectionEngine {
         return;
       }
     }
+    // arrivato all'auto ma non riparte: dopo un po' l'avviso "si libera" si ritira
+    if (m.state === 'USER_RETURNING' && m.nearReturnT !== null && c.now - m.nearReturnT > cfg.NEAR_RETURN_TIMEOUT_S * 1000) {
+      m.nearReturnT = null;
+      this.transition('PARKED', `vicino all'auto da ${Math.round(cfg.NEAR_RETURN_TIMEOUT_S / 60)} min senza ripartire`, c.now);
+      return;
+    }
+    if (m.state === 'PARKED' && this.nearReturn(c.now)) {
+      m.nearReturnT = c.now;
+      this.transition('USER_RETURNING', `arrivato all'auto da vicino (${d} m): partenza probabile a breve`, c.now);
+      return;
+    }
     if (c.walkingConfirmed && d !== null) {
       if (m.state === 'PARKED' && d > cfg.AWAY_DISTANCE) {
         m.returnSeries = [];
@@ -1110,6 +1124,29 @@ export class DetectionEngine {
     );
     this.evalDeparted(c);
     return true;
+  }
+
+  /**
+   * Ritorno all'auto da pochi metri (casa, negozio davanti): per minuti il telefono è rimasto
+   * a 12+ m dall'auto (al chiuso), ora i fix precisi lo danno accanto all'auto.
+   */
+  private nearReturn(now: number): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    const s = m.session;
+    if (!s || s.gpsLostAtPark || s.parkedT === null) return false;
+    if (now - s.parkedT < cfg.NEAR_RETURN_MIN_PARK_S * 1000) return false;
+    if (m.nearReturnT !== null && now - m.nearReturnT < cfg.NEAR_RETURN_TIMEOUT_S * 2000) return false;
+    const spot = s.spot.pointFinal;
+    const fx = m.fixes.filter((f) => f.t <= now);
+    const recent = fx.filter((f) => now - f.t <= 15_000);
+    if (recent.length < 2) return false;
+    const atCar = recent.slice(-2).every((f) => f.accuracy <= cfg.NEAR_RETURN_MAX_ACC_M && distanceM(spot, f) <= cfg.NEAR_RETURN_AT_CAR_M);
+    if (!atCar) return false;
+    const before = fx.filter((f) => now - f.t > 30_000 && now - f.t <= 300_000).map((f) => distanceM(spot, f)).sort((a, b) => a - b);
+    if (before.length < 5) return false;
+    const median = before[Math.floor(before.length / 2)];
+    return median >= cfg.NEAR_RETURN_FROM_M;
   }
 
   private evalAway(c: Ctx): void {

@@ -87,7 +87,8 @@ export class CommunityBridge {
         await this.share(session, 'SOON', now + (ri?.releaseEtaS ?? this.cfg().RETURN_DEPART_DELAY_S * 3) * 1000, now);
         break;
       case 'USER_RETURNING':
-        if (e.from === 'PARKED_USER_AWAY' || e.from === 'RETURN_PREDICTED') {
+        // anche da PARKED: sei arrivato all'auto da casa o dal negozio lì davanti
+        if (e.from === 'PARKED_USER_AWAY' || e.from === 'RETURN_PREDICTED' || e.from === 'PARKED') {
           await this.share(session, 'SOON', now + this.cfg().RETURN_DEPART_DELAY_S * 1000, now);
         }
         break;
@@ -96,7 +97,11 @@ export class CommunityBridge {
         await this.share(session, 'FREED', e.t, now);
         break;
       case 'PARKED_USER_AWAY':
-        if (e.from === 'RETURN_PREDICTED' && this.state.shared?.id === id) await this.withdraw(id);
+        if ((e.from === 'RETURN_PREDICTED' || e.from === 'USER_RETURNING') && this.state.shared?.id === id) await this.withdraw(id);
+        break;
+      case 'PARKED':
+        // eri all'auto ma non sei ripartito
+        if (e.from === 'USER_RETURNING' && this.state.shared?.id === id && this.state.shared.kind === 'SOON') await this.withdraw(id);
         break;
       case 'LOW_CONFIDENCE':
         if (e.from === 'VEHICLE_DEPARTED' && this.state.shared?.id === id) await this.withdraw(id);

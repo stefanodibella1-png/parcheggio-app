@@ -9,6 +9,7 @@ import { SCENARIOS } from '../scenarios.ts';
 import { fmtDuration } from '../format.ts';
 import { space, usePalette } from '../theme.ts';
 import { VersionNote } from '../components/VersionNote.tsx';
+import { simulateSpot, type SimStep } from '../../services/simulateSpot.ts';
 import type { Nav } from '../nav.ts';
 
 export function TestScreen({ nav }: { nav: Nav }) {
@@ -21,6 +22,7 @@ export function TestScreen({ nav }: { nav: Nav }) {
   const [updAvail, setUpdAvail] = useState(false);
   const [updBusy, setUpdBusy] = useState(false);
   const [pub, setPub] = useState<{ at: number; note: string } | null>(null);
+  const [sim, setSim] = useState<{ step: SimStep; info?: string } | null>(null);
   const hasUpd = updAvail || updatePending();
   useEffect(() => {
     if (hasUpd) void latestPublished().then(setPub);
@@ -154,6 +156,32 @@ export function TestScreen({ nav }: { nav: Nav }) {
           />
         ) : null}
         <VersionNote pending={updAvail || updatePending()} style={{ marginTop: space.xs }} />
+        <Card style={{ marginTop: space.md, borderColor: c.accent }}>
+          <Label bold>🔊 Simulazione: posto che si libera</Label>
+          <Label dim size={13} style={{ marginTop: 2 }}>
+            Fa sentire cosa riceve chi cerca parcheggio: subito «si libera tra 2 minuti», dopo 20 secondi «è libero». Lo ricevono anche gli altri telefoni di prova vicini.
+          </Label>
+          <Button
+            small
+            title={
+              sim === null || sim.step === 'fine' || sim.step === 'errore'
+                ? 'Avvia simulazione'
+                : sim.step === 'cerco'
+                  ? 'Preparo…'
+                  : sim.step === 'soon'
+                    ? 'Si libera tra 2 min… (attendi 20 s)'
+                    : 'Libero!'
+            }
+            disabled={sim !== null && sim.step !== 'fine' && sim.step !== 'errore'}
+            style={{ marginTop: space.sm }}
+            onPress={() => {
+              const t = s.track;
+              void simulateSpot((step, info) => setSim({ step, info }), t.length ? t[t.length - 1] : null);
+            }}
+          />
+          {sim?.step === 'errore' ? <Label color={c.danger} size={13} style={{ marginTop: 4 }}>{sim.info}</Label> : null}
+          {sim?.info && sim.step !== 'errore' ? <Label dim size={13} style={{ marginTop: 4 }}>Posto: {sim.info}</Label> : null}
+        </Card>
         {s.error ? (
           <Card style={{ marginTop: space.md, borderColor: c.danger }}>
             <Label color={c.danger}>{s.error}</Label>

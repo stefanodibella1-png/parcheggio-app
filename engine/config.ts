@@ -88,6 +88,16 @@ export interface DetectionConfig {
   /** il parcheggio del test precedente si riprende solo se tra la fine di quel test e l'inizio del nuovo è passato poco (altrimenti l'auto può essersi mossa senza essere vista) */
   CARRYOVER_MAX_GAP_S: number;
   /** partenza "a deriva": GPS senza velocità (solo Wi-Fi/celle) ma activity IN_VEHICLE e distanza che cresce */
+  /** ritorno all'auto "da vicino" (casa o negozio a pochi metri): sosta minima prima di considerarlo (s) */
+  NEAR_RETURN_MIN_PARK_S: number;
+  /** distanza tipica da cui si arriva (al chiuso, a pochi metri) (m) */
+  NEAR_RETURN_FROM_M: number;
+  /** "sei all'auto" sotto questa distanza (m) */
+  NEAR_RETURN_AT_CAR_M: number;
+  /** precisione minima dei fix per questa regola (m) */
+  NEAR_RETURN_MAX_ACC_M: number;
+  /** se dopo essere arrivato all'auto non riparti entro questo tempo, l'avviso si ritira (s) */
+  NEAR_RETURN_TIMEOUT_S: number;
   DRIFT_WINDOW_S: number;
   DRIFT_ACT_WINDOW_S: number;
   DRIFT_MIN_VEH_ACTS: number;
@@ -244,6 +254,13 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   // tablet 12/10 ore 14:05: partito dal parcheggio a passo d'uomo, poi solo posizioni Wi-Fi con velocità 0
   // per 2,5 km con activity IN_VEHICLE: la partenza non veniva mai riconosciuta
   DRIFT_WINDOW_S: 900,
+  // casa a 16-20 m dall'auto (10/10 ore 13:03): GPS fermo a 16 m per ore, poi 2,5 m quando sei all'auto,
+  // partenza 110 s dopo. Prima nessun avviso perché non risultavi mai "lontano".
+  NEAR_RETURN_MIN_PARK_S: 600,
+  NEAR_RETURN_FROM_M: 12,
+  NEAR_RETURN_AT_CAR_M: 7,
+  NEAR_RETURN_MAX_ACC_M: 10,
+  NEAR_RETURN_TIMEOUT_S: 300,
   DRIFT_ACT_WINDOW_S: 90,
   DRIFT_MIN_VEH_ACTS: 3,
   DRIFT_SPAN_S: 240,
