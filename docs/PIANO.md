@@ -29,8 +29,8 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | A | Installare la **build 22** (runtime 4, pronta il 14/10 22:56) su telefono e tablet; batteria "Nessuna restrizione" + avvio automatico | Appena la build è pronta |
 | B | Inviare gli export dei 3 giorni di prova GPS (telefono + tablet) | Dopo 3 giorni dall'installazione |
 | C | Prova cattiva: chiudere PARCHEGGIO dalle recenti mentre guida | Durante i 3 giorni, una volta |
-| D | PARCHEGGIO: aggiungere ruolo **CERCA** (ascolto continuo, voce da fermo) | Dopo la build GPS, prima della prova a due telefoni |
-| E | PARCHEGGIO: **registro avvisi ricevuti** nell'export (ora, tipo, distanza, anticipo) | Insieme a D |
+| D | ✓ 14/10: PARCHEGGIO ruolo **CERCA** (schermata Test, interruttore; ascolto continuo, voce da fermo, «In ascolto ✓ · ultimo controllo N s fa» e ultimo avviso in grande) | fatto (aggiornamento JS) |
+| E | ✓ 14/10: export PARCHEGGIO con `alertsReceived` (ora, tipo, distanza, anticipo `leadS`, ritardo `delayS`), `listenLog` (ascolto acceso/spento, interruzioni > 60 s) e `alertsSent` (pubblicato, ritirato, NON pubblicato e perché) | fatto (aggiornamento JS) |
 | F | Usare la **revisione** in Risultati (corretto / sbagliato / mancato) su ogni test | Ogni volta che manda un export |
 | G | **Schermata guidata batteria per marca** (Xiaomi, Samsung, Oppo/Realme, Huawei, OnePlus, Motorola, Pixel) | Prima della prova in microzona |
 | I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
