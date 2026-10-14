@@ -8,8 +8,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 2. ✅ **GPS**: nuova build (runtime 4, guardiano che riavvia il servizio morto + registro nell'export). 3 giorni di uso normale su telefono Xiaomi e tablet Samsung. Promosso se: nessun buco GPS > 5 min in movimento; ogni morte del servizio seguita da riavvio registrato; prova "chiudo PARCHEGGIO dalle recenti mentre guido" → GPS ripartito entro 2 min.
 3. ✅ **Motore**: nessuna regola senza un caso reale riprodotto in replay; niente avviso "si libera" con dati vecchi o scarsi (GPS assente da troppo, solo Wi-Fi, sotterraneo); ogni cambio di stato scrive il motivo (export + revisione). Score di confidenza / ML congelati fino ai dati dei tester.
 
+4. ✅ **Prova a due telefoni** (dopo GPS promosso + ruolo CERCA in PARCHEGGIO): telefono in tasca parcheggia, si allontana 200–300 m, torna e riparte; tablet in ruolo CERCA a 300–500 m. Riuscita = "si libera tra N min" PRIMA della partenza + "libero ora" alla partenza, voce e notifica. 10 riuscite di fila (se una fallisce: analisi export e si riparte da zero). Luoghi diversi: casa, Etnapolis esterno, centro. **Stefano esegue, Claude gli dice quando.**
+
 ## Decisioni ancora da prendere
-4. Prova a due telefoni (10 prove consecutive).
 5. Misure di affidabilità (precisione ≥ 90 %, copertura ≥ 60 %, anticipo mediano ≥ 60 s).
 6. Sicurezza Firestore.
 7. Pagamenti / fondatori / inviti (proposta: niente incassi prima della prova).
@@ -27,6 +28,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | E | PARCHEGGIO: **registro avvisi ricevuti** nell'export (ora, tipo, distanza, anticipo) | Insieme a D |
 | F | Usare la **revisione** in Risultati (corretto / sbagliato / mancato) su ogni test | Ogni volta che manda un export |
 | G | **Schermata guidata batteria per marca** (Xiaomi, Samsung, Oppo/Realme, Huawei, OnePlus, Motorola, Pixel) | Prima della prova in microzona |
+| I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
 | H | Verificare se i pacchetti fondatore sono **acquistabili** oggi in ParkingCT | Alla decisione 7 |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
