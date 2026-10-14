@@ -20,8 +20,8 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 9. ✅ **Google Play**: account aperto solo dopo prova GPS (2) + prova a due telefoni (4) superate. Data limite 10/11: se le prove non sono passate, il lancio del 1/12 slitta. Test chiuso di 14 giorni con ParkingCT e i tester della microzona. Privacy ParkingCT (8) prima del test chiuso. Claude avvisa Stefano quando le prove sono passate, e comunque il 3/11.
 
-## Decisioni ancora da prendere
-10. Microzona e tester.
+10. ✅ **Microzona: centro di Catania.** 30–50 tester (minimo 12 per Google Play), almeno 10 che ci parcheggiano ogni giorno + altrettanti che cercano. 14 giorni = test chiuso Google Play. Domanda nell'app dopo ogni avviso: "L'hai preso? Sì / No / Non ci sono andato". Messaggio di reclutamento: lo prepara Claude al momento giusto.
+11. ✅ **Contatore reale** (richiesta di Stefano): quante persone hanno installato ParkingCT e quante la usano davvero, anche con l'app in background. Oggi il control center conta un telefono come "attivo" solo quando apre l'app (`registerDevice` in PublicApp) → va aggiunto un segnale di vita dal background (al massimo ogni ~3 h) e i numeri: installati, attivi oggi, attivi 7 giorni, in centro, rilevamento acceso, parcheggi rilevati, spariti (non visti da 7 giorni). Lavoro per un agente.
 
 ## Da fare / da ricordare — con il momento giusto
 | # | Cosa | Quando ricordarlo |
@@ -37,6 +37,8 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | J | **Strumento metriche** `tools/metrics.ts` (precisione, copertura, anticipo da export + revisioni) — lavoro per un agente, solo cartella tools/ | Subito, in parallelo |
 | K | **Privacy e GDPR su ParkingCT** (vedi decisione 8) | Alla ripresa di ParkingCT, e comunque PRIMA che la usi qualsiasi tester esterno |
 | L | **Aprire account Google Play (25 $)** | Appena superate le prove 2 e 4; promemoria fisso il 3/11; limite 10/11 |
+| M | **Messaggio di reclutamento tester** per il centro di Catania | Quando le prove 2 e 4 sono superate |
+| N | **Domanda "L'hai preso?"** dopo ogni avviso ricevuto in ParkingCT | Prima della prova in microzona |
 | H | ✓ 14/10: pacchetti fondatore **NON acquistabili** (link Stripe vuoti, nessuna chiave Stripe) | fatto |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
