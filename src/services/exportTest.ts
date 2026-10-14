@@ -8,6 +8,49 @@ import { distanceM } from '../../engine/geo.ts';
 import * as db from '../storage/db.ts';
 import { deviceInfo } from './deviceInfo.ts';
 import { ActivityRecognition } from '../../modules/activity-recognition/index.ts';
+import { ALERTS_LOG_KEY, type AlertLogEntry } from '../community/bridge.ts';
+
+function hhmmss(t: number): string {
+  const d = new Date(t);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/**
+ * Avvisi ricevuti dal telefono che cerca (ruolo CERCA): ora, tipo, distanza e anticipo.
+ * Anticipo di un SOON = secondi tra la sua ricezione e l'ora del FREED dello stesso posto
+ * (quando il telefono che libera ha rilevato la partenza). Ritardo di un FREED = secondi
+ * tra quell'ora e la ricezione.
+ */
+async function receivedAlerts(fromT: number, toT: number) {
+  let log: AlertLogEntry[] = [];
+  try {
+    const raw = await db.kvGet(ALERTS_LOG_KEY);
+    log = raw ? (JSON.parse(raw) as AlertLogEntry[]) : [];
+  } catch {
+    log = [];
+  }
+  const all = log.filter((e) => e.type === 'alert') as Extract<AlertLogEntry, { type: 'alert' }>[];
+  const freed = new Map(all.filter((e) => e.kind === 'FREED').map((e) => [e.id, e]));
+  const inTest = (t: number) => t >= fromT && t <= toT;
+  const alertsReceived = all.filter((e) => inTest(e.t)).map((e) => {
+    const f = freed.get(e.id);
+    return {
+      t: e.t,
+      ora: hhmmss(e.t),
+      type: e.kind,
+      distanceM: e.distanceM,
+      spotId: e.id,
+      alerted: e.alerted,
+      leadS: e.kind === 'SOON' && f ? Math.round((f.freeAt - e.t) / 1000) : null,
+      delayS: e.kind === 'FREED' ? Math.round((e.t - e.freeAt) / 1000) : null,
+    };
+  });
+  const listenLog = log
+    .filter((e) => e.type !== 'alert' && inTest(e.t))
+    .map((e) => ({ ...e, ora: hhmmss(e.t) }));
+  return { alertsReceived, listenLog };
+}
 
 export const SCHEMA_VERSION = 2;
 
@@ -46,6 +89,7 @@ export async function buildExport(testId: string) {
   const serviceLog = (await ActivityRecognition.getServiceLog().catch(() => [])).filter(
     (x) => x.t >= test.startedAt && x.t <= exportedAt,
   );
+  const { alertsReceived, listenLog } = await receivedAlerts(test.startedAt, exportedAt);
   const json = {
     schemaVersion: SCHEMA_VERSION,
     app: 'PARCHEGGIO',
@@ -73,6 +117,8 @@ export async function buildExport(testId: string) {
     reviewLabels: labels,
     qualityWarnings: quality,
     serviceLog,
+    alertsReceived,
+    listenLog,
   };
   return { test, json, inputs, events, sessions };
 }

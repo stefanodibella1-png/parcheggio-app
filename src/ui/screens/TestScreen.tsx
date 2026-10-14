@@ -231,6 +231,19 @@ export function TestScreen({ nav }: { nav: Nav }) {
                 <CarCard session={s.session} distanceM={s.snapshot?.distanceFromParkingM ?? null} now={now} />
               </View>
             ) : null}
+            <Card style={{ marginTop: space.md, borderColor: host.searchRole ? c.accent : c.border }}>
+              <Label bold>🔍 Questo telefono CERCA parcheggio</Label>
+              <Label dim size={13} style={{ marginTop: 2 }}>
+                Per la prova a due telefoni (es. il tablet): ascolta sempre i posti entro 800 m, con voce e notifica anche da fermo. Il rilevamento non cambia. Tienilo in carica con il test attivo.
+              </Label>
+              <Button
+                small
+                variant={host.searchRole ? undefined : 'ghost'}
+                title={host.searchRole ? '✓ CERCA acceso · tocca per spegnere' : 'Accendi il ruolo CERCA'}
+                style={{ marginTop: space.sm }}
+                onPress={() => void host.setSearchRole(!host.searchRole)}
+              />
+            </Card>
             <View style={{ marginTop: space.md }}>
               <CommunityCard community={s.community} now={now} />
             </View>

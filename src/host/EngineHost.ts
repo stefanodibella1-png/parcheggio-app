@@ -77,6 +77,8 @@ export interface HostState {
 type Listener = (s: HostState) => void;
 
 const CONFIG_KEY = 'config:overrides';
+/** PARCHEGGIO: ruolo CERCA acceso su questo telefono */
+const LAB_SEARCH_KEY = 'lab:cerca';
 const MAX_UI_EVENTS = 300;
 const MAX_TRACK = 3000;
 
@@ -154,6 +156,9 @@ class Host {
         const cfg = await db.kvGet('pc:config').catch(() => null);
         const launchAt = cfg ? (JSON.parse(cfg) as { launchAt: number }).launchAt : Infinity;
         this.community.setAllowed(Date.now() >= launchAt);
+      } else if ((await db.kvGet(LAB_SEARCH_KEY).catch(() => null)) === '1') {
+        // PARCHEGGIO: il ruolo CERCA resta acceso anche dopo un riavvio dell'app
+        this.community.setTestListen(true);
       }
       this.state.community = { ...this.community.state };
       const overrides = await db.kvGet(CONFIG_KEY);
@@ -384,6 +389,18 @@ class Host {
    * permette di riavviare i sensori) si chiude il registro e se ne apre uno nuovo: l'auto
    * parcheggiata passa al nuovo registro. I registri più vecchi di 7 giorni si cancellano.
    */
+  /** PARCHEGGIO: ruolo CERCA (ascolto continuo dei posti vicini, voce anche da fermo) */
+  get searchRole(): boolean {
+    return this.community.searchRole;
+  }
+
+  async setSearchRole(on: boolean): Promise<void> {
+    if (IS_PUBLIC) return;
+    await db.kvSet(LAB_SEARCH_KEY, on ? '1' : '').catch(() => {});
+    this.community.setTestListen(on);
+    this.emitChange();
+  }
+
   setCommunityAllowed(allowed: boolean, testListen = false): void {
     this.community.setAllowed(allowed);
     this.community.setTestListen(testListen);

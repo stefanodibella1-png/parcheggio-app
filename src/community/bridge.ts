@@ -12,6 +12,18 @@ import { communityConfigured, fetchNearby, publishSpot, recordTaken, withdrawSpo
 import { distanceM } from '../../engine/geo.ts';
 import { publicId } from '../parkingct/server.ts';
 import { parkingRestriction } from '../services/osmRules.ts';
+import { IS_PUBLIC } from '../variant.ts';
+
+/** PARCHEGGIO: registro di ciò che il telefono che cerca ha ricevuto (finisce nell'export). */
+export const ALERTS_LOG_KEY = 'lab:alertsLog';
+const ALERTS_LOG_MAX = 1000;
+/** due controlli dei posti a più di questo intervallo = ascolto interrotto (app congelata, rete) */
+const LISTEN_GAP_MS = 60_000;
+
+export type AlertLogEntry =
+  | { t: number; type: 'alert'; id: string; kind: SpotKind; distanceM: number; freeAt: number; alerted: boolean }
+  | { t: number; type: 'listen'; on: boolean }
+  | { t: number; type: 'gap'; fromT: number; durS: number };
 
 export interface CommunityState {
   configured: boolean;
@@ -40,7 +52,30 @@ export class CommunityBridge {
   /** guida vocale: quante voci per posto (max 2: alla ricezione e a 300 m) e distanze recenti */
   private voiced = new Map<string, { n: number; spot: NearbySpot; dists: { t: number; d: number }[] }>();
 
+  /** registro avvisi ricevuti (solo PARCHEGGIO) */
+  private log: AlertLogEntry[] = [];
+  private logged = new Set<string>();
+  private lastPollDoneT = 0;
+
   constructor(private cfg: () => DetectionConfig, private onChange: () => void) {}
+
+  private async loadLog(): Promise<void> {
+    if (IS_PUBLIC) return;
+    try {
+      const raw = await kvGet(ALERTS_LOG_KEY);
+      this.log = raw ? (JSON.parse(raw) as AlertLogEntry[]) : [];
+    } catch {
+      this.log = [];
+    }
+    for (const e of this.log) if (e.type === 'alert') this.logged.add(`${e.id}:${e.kind}`);
+  }
+
+  private addLog(entries: AlertLogEntry[]): void {
+    if (IS_PUBLIC || entries.length === 0) return;
+    this.log.push(...entries);
+    if (this.log.length > ALERTS_LOG_MAX) this.log.splice(0, this.log.length - ALERTS_LOG_MAX);
+    void kvSet(ALERTS_LOG_KEY, JSON.stringify(this.log)).catch(() => {});
+  }
 
   /** ParkingCT: prima del lancio la community resta spenta (si raccolgono solo i dati). */
   setAllowed(allowed: boolean): void {
@@ -58,6 +93,11 @@ export class CommunityBridge {
     this.testListen = on;
   }
 
+  /** PARCHEGGIO: questo telefono ha il ruolo CERCA (ascolto continuo) */
+  get searchRole(): boolean {
+    return this.testListen;
+  }
+
   async init(): Promise<void> {
     let id = await kvGet('community:deviceId').catch(() => null);
     if (!id) {
@@ -65,6 +105,7 @@ export class CommunityBridge {
       await kvSet('community:deviceId', id).catch(() => {});
     }
     this.deviceId = id;
+    await this.loadLog();
   }
 
   // ---- chi libera ---------------------------------------------------------------
@@ -189,6 +230,8 @@ export class CommunityBridge {
     const listening = this.testListen || now < this.listenUntil;
     if (listening !== this.state.listening) {
       this.state.listening = listening;
+      this.addLog([{ t: now, type: 'listen', on: listening }]);
+      this.lastPollDoneT = 0;
       if (!listening) {
         this.state.nearby = [];
         this.voiced.clear();
@@ -199,6 +242,9 @@ export class CommunityBridge {
     if (!listening || !last || this.polling || now - this.lastPollT < cfg.COMMUNITY_POLL_S * 1000) return;
     this.lastPollT = now;
     this.polling = true;
+    if (this.lastPollDoneT > 0 && now - this.lastPollDoneT > LISTEN_GAP_MS) {
+      this.addLog([{ t: now, type: 'gap', fromT: this.lastPollDoneT, durS: Math.round((now - this.lastPollDoneT) / 1000) }]);
+    }
     const driving = ['IN_VEHICLE', 'VEHICLE_MOVING', 'VEHICLE_STOPPED', 'POSSIBLE_PARKING'].includes(snap.state);
     void fetchNearby(last, cfg.COMMUNITY_RADIUS_M, [publicId(this.deviceId, now), publicId(this.deviceId, now - 86_400_000)], now)
       .then(async (list) => {
@@ -209,6 +255,17 @@ export class CommunityBridge {
         this.state.error = null;
         this.state.nearby = list;
         this.state.lastSyncT = now;
+        this.lastPollDoneT = now;
+        // registro: ogni posto ricevuto, una volta per tipo (si libera / libero)
+        const top2 = new Set([...list].sort((a, b) => a.distanceM - b.distanceM).slice(0, 2).map((x) => x.id));
+        const fresh: AlertLogEntry[] = [];
+        for (const s of list) {
+          const k = `${s.id}:${s.kind}`;
+          if (this.logged.has(k)) continue;
+          this.logged.add(k);
+          fresh.push({ t: now, type: 'alert', id: s.id, kind: s.kind, distanceM: s.distanceM, freeAt: s.freeAt, alerted: top2.has(s.id) && this.notified.get(s.id) !== s.kind });
+        }
+        this.addLog(fresh);
         for (const s of list) this.received.set(s.id, { spot: s, t: now });
         // posti annunciati a voce e poi spariti (ritirati, presi, scaduti) mentre ti avvicinavi
         const ids = new Set(list.map((x) => x.id));
