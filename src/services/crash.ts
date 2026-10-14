@@ -39,7 +39,11 @@ export function report(kind: string, e: unknown, extra = ''): void {
 }
 
 /** Errori JavaScript non gestiti: si registrano e poi si lascia fare al gestore originale. */
+let installed = false;
+
 export function installCrashHandler(): void {
+  if (installed) return;
+  installed = true;
   const g = globalThis as unknown as { ErrorUtils?: { getGlobalHandler(): (e: unknown, fatal?: boolean) => void; setGlobalHandler(h: (e: unknown, fatal?: boolean) => void): void } };
   const eu = g.ErrorUtils;
   if (!eu) return;
@@ -55,3 +59,7 @@ export function installCrashHandler(): void {
     onUnhandled: (_id: number, e: unknown) => report('promise', e),
   });
 }
+
+// si installa appena il modulo viene caricato (index.ts lo carica per primo): così prende anche
+// gli errori durante il caricamento degli altri moduli
+installCrashHandler();
