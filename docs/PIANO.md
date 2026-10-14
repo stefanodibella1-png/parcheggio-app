@@ -16,8 +16,9 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 
 7. ✅ **Pagamenti**: niente incassi fino alla fine della prova in microzona. ParkingCT resta con le funzioni richieste da Stefano (pacchetti visibili, link vuoti). Tester della microzona gratis. Inviti senza premi finché non sono verificati dal server. Idea di Stefano: rinominare "Fondatore" in "Sostenitore" → da decidere al momento della riapertura dei pagamenti, insieme a: vantaggi sì/no, consulenza legale, regole Google Play (verificare la policy attuale su contributi/mance).
 
+8. ✅ **Privacy / GDPR**: non ora (PARCHEGGIO non va su Google Play). Su **ParkingCT** vanno sistemati **subito alla ripresa**, a prescindere da Google Play: informativa privacy, schermata che spiega la posizione in background prima del permesso, al server solo parcheggi e posti (mai il percorso GPS), errori senza posizioni, cancellazione automatica dei dati, revisione professionale prima di incassare.
+
 ## Decisioni ancora da prendere
-8. Privacy / GDPR.
 9. Google Play (proposta: aprire l'account subito; i 12 tester × 14 giorni = tester della microzona).
 10. Microzona e tester.
 
@@ -33,6 +34,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | G | **Schermata guidata batteria per marca** (Xiaomi, Samsung, Oppo/Realme, Huawei, OnePlus, Motorola, Pixel) | Prima della prova in microzona |
 | I | **Avvisare Stefano che è il momento della prova a due telefoni** e guidarlo prova per prova | Appena GPS promosso e D+E pubblicati |
 | J | **Strumento metriche** `tools/metrics.ts` (precisione, copertura, anticipo da export + revisioni) — lavoro per un agente, solo cartella tools/ | Subito, in parallelo |
+| K | **Privacy e GDPR su ParkingCT** (vedi decisione 8) | Alla ripresa di ParkingCT, e comunque PRIMA che la usi qualsiasi tester esterno |
 | H | ✓ 14/10: pacchetti fondatore **NON acquistabili** (link Stripe vuoti, nessuna chiave Stripe) | fatto |
 
 ## Funzioni congelate (riprendere una alla volta, in quest'ordine, solo dopo i test)
