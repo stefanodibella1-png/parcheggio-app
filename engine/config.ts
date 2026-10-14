@@ -90,6 +90,12 @@ export interface DetectionConfig {
   /** partenza "a deriva": GPS senza velocità (solo Wi-Fi/celle) ma activity IN_VEHICLE e distanza che cresce */
   /** ritorno all'auto "da vicino" (casa o negozio a pochi metri): sosta minima prima di considerarlo (s) */
   NEAR_RETURN_MIN_PARK_S: number;
+  /** ritorno all'auto anche se il punto salvato è impreciso: ti fermi entro questa distanza dopo esserti avvicinato a piedi (m) */
+  RETURN_STOP_RADIUS_M: number;
+  /** quanto ti devi essere avvicinato negli ultimi minuti per contare come ritorno (m) */
+  RETURN_STOP_APPROACH_M: number;
+  /** da quanto devi essere fermo lì (s) */
+  RETURN_STOP_STILL_S: number;
   /** distanza tipica da cui si arriva (al chiuso, a pochi metri) (m) */
   NEAR_RETURN_FROM_M: number;
   /** "sei all'auto" sotto questa distanza (m) */
@@ -257,6 +263,10 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   // casa a 16-20 m dall'auto (10/10 ore 13:03): GPS fermo a 16 m per ore, poi 2,5 m quando sei all'auto,
   // partenza 110 s dopo. Prima nessun avviso perché non risultavi mai "lontano".
   NEAR_RETURN_MIN_PARK_S: 600,
+  // 14/10 ore 15:41: in auto, ma "a 50 m dall'auto" (punto salvato impreciso): nessun avviso
+  RETURN_STOP_RADIUS_M: 70,
+  RETURN_STOP_APPROACH_M: 40,
+  RETURN_STOP_STILL_S: 15,
   NEAR_RETURN_FROM_M: 12,
   NEAR_RETURN_AT_CAR_M: 7,
   NEAR_RETURN_MAX_ACC_M: 10,

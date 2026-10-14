@@ -175,7 +175,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 3;
+export const ENGINE_LOGIC = 4;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -1149,6 +1149,20 @@ export class DetectionEngine {
     return median >= cfg.NEAR_RETURN_FROM_M;
   }
 
+  private stoppedAfterApproach(c: Ctx): boolean {
+    const cfg = this.cfg;
+    const m = this.m;
+    if (!c.stationary || m.stopSince === null || c.now - m.stopSince < cfg.RETURN_STOP_STILL_S * 1000) return false;
+    if (m.session?.gpsLostAtPark) return false;
+    // ci si è avvicinati davvero negli ultimi 5 minuti, camminando
+    const series = m.returnSeries.filter((x) => c.now - x.t <= 300_000);
+    if (series.length < 3) return false;
+    const maxD = Math.max(...series.map((x) => x.d));
+    const d = series[series.length - 1].d;
+    if (maxD - d < cfg.RETURN_STOP_APPROACH_M) return false;
+    return m.lastWalkActT === null ? true : c.now - m.lastWalkActT <= 300_000;
+  }
+
   private evalAway(c: Ctx): void {
     const cfg = this.cfg;
     const m = this.m;
@@ -1192,6 +1206,14 @@ export class DetectionEngine {
     }
     if (!c.vehicleConfirmed && c.kmh !== null && c.kmh <= cfg.WALKING_SPEED_MAX) m.awayVehicleLogged = false;
 
+    // Ritorno anche con il punto dell'auto impreciso: ti sei avvicinato a piedi e ti sei fermato
+    // vicino (sei salito in auto). Prima serviva arrivare entro 20 m dal punto salvato.
+    if (d !== null && d > cfg.RETURN_RADIUS && d <= cfg.RETURN_STOP_RADIUS_M && this.stoppedAfterApproach(c)) {
+      m.arrivedInVehicle = false;
+      m.nearReturnT = c.now;
+      this.transition('USER_RETURNING', `fermo a ${d} m dall'auto dopo essere tornato a piedi: probabilmente sei salito in auto`, c.now);
+      return;
+    }
     if (d !== null && d <= cfg.RETURN_RADIUS) {
       m.arrivedInVehicle = c.vehicleConfirmed || (c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX);
       // Era già lì, fermo o a piedi, prima di muoversi in veicolo: non è un arrivo, è la partenza
