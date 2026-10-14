@@ -167,6 +167,18 @@ class Host {
     }
   }
 
+  /** Rigioca gli input a blocchi, lasciando respirare lo schermo tra un blocco e l'altro. */
+  private async replayChunked(engine: DetectionEngine, inputs: EngineInput[], events: DetectionEvent[]): Promise<void> {
+    for (let i = 0; i < inputs.length; i++) {
+      events.push(...engine.process(inputs[i]));
+      if (i % 1500 === 1499) {
+        engine.drainSnapshots();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+    engine.drainSnapshots();
+  }
+
   /** Riprende un test attivo (app riaperta o rilanciata dal sistema in background). */
   private async resume(test: db.TestRow): Promise<void> {
     const saved = await db.kvGet(`engine:${test.id}`);
@@ -181,10 +193,10 @@ class Host {
       }
     }
     if (!this.engine) {
-      // ricostruzione dal registro degli input
       this.engine = new DetectionEngine(test.config, test.id);
-      for (const i of normalizeInputs(await db.getInputs(test.id)).inputs) this.engine.process(i);
-      this.engine.drainSnapshots();
+      // Regole cambiate: si parte subito e il ricalcolo gira dopo, a pezzi, senza bloccare lo schermo.
+      // (14/10: il ricalcolo di un giorno intero bloccava l'app sullo schermo nero.)
+      if (!stale) await this.replayChunked(this.engine, normalizeInputs(await db.getInputs(test.id)).inputs, []);
     }
     this.state.active = true;
     this.state.testId = test.id;
@@ -690,7 +702,13 @@ class Host {
       const before = this.engine.state;
       const fresh = new DetectionEngine(this.engine.cfg, testId);
       const events: DetectionEvent[] = [];
-      for (const i of all) events.push(...fresh.process(i));
+      await this.replayChunked(fresh, all, events);
+      // input arrivati mentre si ricalcolava (salvati nel registro nel frattempo)
+      await this.flush(true);
+      const lastT = all.length ? inputTime(all[all.length - 1]) : 0;
+      const more = normalizeInputs(await db.getInputs(testId)).inputs.filter((i) => inputTime(i) > lastT);
+      for (const i of more) events.push(...fresh.process(i));
+      all.push(...more);
       fresh.drainSnapshots();
       const done = new Set(all.map((i) => JSON.stringify(i)));
       this.buffer.dropIf((i) => done.has(JSON.stringify(i)));

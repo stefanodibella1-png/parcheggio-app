@@ -44,6 +44,18 @@ jobs:
       - name: Test del motore
         run: npm run test:engine
 
+      - name: Controllo TypeScript (blocca l'aggiornamento se ci sono errori)
+        run: |
+          if ! npx tsc --noEmit > tsc.log 2>&1; then
+            head -30 tsc.log | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+
+      - name: Prova bundle JavaScript (blocca l'aggiornamento se non compila)
+        run: |
+          set -o pipefail
+          npx expo export --platform android --output-dir /tmp/bundle-check > bundle.log 2>&1 || { grep -iE "error|unable" bundle.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+
       - name: Runtime identico all'APK installata
         run: |
           # runtime-android.txt viene scritto dalla build APK leggendo l'APK stessa

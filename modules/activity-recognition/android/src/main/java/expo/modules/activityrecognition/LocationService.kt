@@ -108,12 +108,18 @@ class LocationService : Service() {
     return NotificationCompat.Builder(this, CHANNEL)
       .setContentTitle(title)
       .setContentText(text)
-      .setSmallIcon(applicationInfo.icon)
+      .setSmallIcon(smallIcon())
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setContentIntent(pi)
       .build()
+  }
+
+  /** icona monocromatica: l'icona dell'app (adattiva) come piccola icona può far rifiutare la notifica */
+  private fun smallIcon(): Int {
+    val id = resources.getIdentifier("notification_icon", "drawable", packageName)
+    return if (id != 0) id else android.R.drawable.ic_menu_mylocation
   }
 
   companion object {

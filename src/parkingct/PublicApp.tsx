@@ -113,10 +113,11 @@ export function PublicApp() {
 
   useEffect(() => {
     void (async () => {
-      await host.ensureInit();
+      // lo schermo compare subito; il motore si avvia in parallelo (prima: schermo nero finché non finiva)
       setOnboarded((await kvGet('pc:onboarded').catch(() => null)) === '1');
-      setFounder(await founderInfo());
+      setFounder(await founderInfo().catch(() => null));
       setReady(true);
+      await host.ensureInit();
       void refreshCfg();
       void updateAvailable();
     })();
