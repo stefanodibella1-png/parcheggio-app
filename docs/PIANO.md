@@ -1,5 +1,7 @@
 # PIANO dopo l'audit (14/10/2026)
 
+**Dal 15/10 si lavora in UNA sola sessione** (richiesta di Stefano).
+
 Ogni sessione legge questo file e **ricorda a Stefano, senza che lo chieda, ogni voce il cui "quando" è arrivato.**
 A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila qui.
 
@@ -27,6 +29,8 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | # | Cosa | Quando ricordarlo |
 |---|------|-------------------|
 | A | Installare la **build 22** (runtime 4, pronta il 14/10 22:56) su telefono e tablet; batteria "Nessuna restrizione" + avvio automatico | Appena la build è pronta |
+| A2 | ✓ 15/10: prova GPS giorno 1 **bocciata** (activity morta, JS addormentato con Maps, GPS muto 17:40–17:58, punto auto sbagliato di 60 m). **Build 23** (runtime 5) con veglia JS, activity nativa, guardiano «vivo ma muto». Da installare su telefono e tablet; la prova di 3 giorni riparte da qui | 15/10 sera |
+| A3 | Prova fissa: 10 min di guida **senza Maps** e 10 min **con Maps aperto** → posizioni `svc`, activity presenti, eventi in tempo reale | Primo giorno con la build 23 |
 | B | Inviare gli export dei 3 giorni di prova GPS (telefono + tablet) | Dopo 3 giorni dall'installazione |
 | C | Prova cattiva: chiudere PARCHEGGIO dalle recenti mentre guida | Durante i 3 giorni, una volta |
 | D | ✓ 14/10: PARCHEGGIO ruolo **CERCA** (schermata Test, interruttore; ascolto continuo, voce da fermo, «In ascolto ✓ · ultimo controllo N s fa» e ultimo avviso in grande) | fatto (aggiornamento JS) |
