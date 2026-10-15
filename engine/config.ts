@@ -139,6 +139,14 @@ export interface DetectionConfig {
   RETURN_MIN_APPROACH_M: number;
   RETURN_MIN_CONFIDENCE: number;
   RETURN_CANCEL_S: number;
+  /** dopo una previsione di ritorno annullata, la successiva solo dopo questi secondi (15/10: 45 avvisi falsi, uno al secondo) */
+  RETURN_REPREDICT_COOLDOWN_S: number;
+  /** "si sta avvicinando" solo se l'arrivo stimato all'auto è entro questi secondi (15/10: previsioni a 22–55 min) */
+  RETURN_MAX_ETA_S: number;
+  /** buco GPS durante la guida oltre il quale il punto del parcheggio che segue è incerto (15/10: 17:40–17:58, auto a 60 m) */
+  DRIVE_GAP_UNCERTAIN_S: number;
+  /** il parcheggio è "dopo il buco" se apre entro questi secondi dal ritorno del GPS */
+  DRIVE_GAP_RECENT_S: number;
   RETURN_GEOFENCE_RADII: number[];
   /** finestra lunga per GPS rado (telefono in tasca, fix ogni 10-15 s) */
   RETURN_LONG_WINDOW_S: number;
@@ -308,6 +316,10 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_MIN_APPROACH_M: 30,
   RETURN_MIN_CONFIDENCE: 70,
   RETURN_CANCEL_S: 60,
+  RETURN_REPREDICT_COOLDOWN_S: 120,
+  RETURN_MAX_ETA_S: 300,
+  DRIVE_GAP_UNCERTAIN_S: 120,
+  DRIVE_GAP_RECENT_S: 600,
   RETURN_GEOFENCE_RADII: [500, 200, 50],
   RETURN_LONG_WINDOW_S: 180,
   RETURN_LONG_APPROACH_M: 80,

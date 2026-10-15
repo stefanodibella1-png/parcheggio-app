@@ -131,6 +131,10 @@ interface Memory {
   farSince?: number | null;
 
   returnSeries: { t: number; d: number }[];
+  /** ultima previsione di ritorno annullata (pausa prima della successiva) */
+  returnCancelT?: number | null;
+  /** quando il GPS è tornato dopo un buco durante la guida */
+  driveGapBackT?: number | null;
   /** fix scartato come salto, in attesa di conferma da un secondo fix coerente */
   returnJump: { t: number; d: number } | null;
   /** semafori noti (chiave = lat,lon arrotondati) */
@@ -185,7 +189,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 6;
+export const ENGINE_LOGIC = 7;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -238,6 +242,8 @@ export class DetectionEngine {
       awayVehicleLogged: false,
       farSince: null,
       returnSeries: [],
+      returnCancelT: null,
+      driveGapBackT: null,
       returnJump: null,
       signals: {},
       fuel: {},
@@ -463,6 +469,9 @@ export class DetectionEngine {
         kmh = (moved / ((s.t - prev.t) / 1000)) * 3.6;
       }
     }
+    // GPS tornato dopo un buco mentre guidavi: il parcheggio che segue ha un punto incerto
+    const prevAny = m.lastFixAny;
+    if (prevAny && s.t - prevAny.t > cfg.DRIVE_GAP_UNCERTAIN_S * 1000 && DRIVING.includes(m.state)) m.driveGapBackT = s.t;
     m.lastFixAny = s;
     m.lastFixAnyKmh = kmh;
     if (s.accuracy <= cfg.DRIFT_FIX_MAX_ACC_M) {
@@ -1024,12 +1033,21 @@ export class DetectionEngine {
     m.drivePath = [];
     const fuelD = this.nearestOf(m.fuel ?? {}, point);
     if (fuelD !== null && fuelD <= this.cfg.FUEL_RADIUS_M) session.atFuelStation = true;
+    // Il GPS è tornato da poco dopo un buco durante la guida (15/10 ore 18:01): le prime posizioni
+    // erano già a piedi, il punto è dove ti sei fermato a piedi e non dove hai lasciato l'auto.
+    // Punto incerto: non si condivide, niente previsioni di ritorno, partenza accettata più lontano.
+    let gapNote = '';
+    if (m.driveGapBackT != null && now - m.driveGapBackT <= this.cfg.DRIVE_GAP_RECENT_S * 1000) {
+      session.gpsLostAtPark = true;
+      gapNote = ' (GPS tornato da poco dopo un buco in guida: punto incerto)';
+    }
+    m.driveGapBackT = null;
     m.session = session;
     m.sessions.push(session);
     m.stopPhase = null;
     m.awayVehicleLogged = false;
     m.carEnterT = [];
-    this.transition('PARKED', session.atFuelStation ? `${reason} (distributore di carburante: rifornimento, non condiviso)` : reason, now, { parkingId });
+    this.transition('PARKED', (session.atFuelStation ? `${reason} (distributore di carburante: rifornimento, non condiviso)` : reason) + gapNote, now, { parkingId });
   }
 
 
@@ -1319,7 +1337,9 @@ export class DetectionEngine {
       // Parcheggio sotterraneo (Etnapolis 12/10 ore 21:15): il punto salvato è l'ingresso della rampa,
       // l'uscita è da un'altra parte e il primo fix in auto arriva a 650 m. Conta anche dove eri
       // (a piedi, fermo) nei minuti prima di salire: se eri vicino all'auto, la partenza è tua.
-      if (m.session?.gpsLostAtPark && startD !== null && startD > radius) {
+      // Vale anche con il punto buono (Etnapolis 15/10 ore 17:16–17:20: a 5–17 m dall'auto, poi
+      // fix imprecisi nella rampa e il primo fix valido in auto a 404 m → "altro mezzo").
+      if (m.session && startD !== null && startD > radius) {
         const spot = m.session.spot.pointFinal;
         for (const fx of m.fixes) {
           if (c.now - fx.t > 300_000 || (fx.speed !== null && fx.speed * 3.6 > cfg.WALKING_SPEED_MAX)) continue;
@@ -1386,8 +1406,12 @@ export class DetectionEngine {
       return;
     }
     const rs = this.returnScore(c.now);
-    if (m.state === 'PARKED_USER_AWAY' && rs >= cfg.RETURN_MIN_CONFIDENCE) {
+    const cooling = m.returnCancelT != null && c.now - m.returnCancelT < cfg.RETURN_REPREDICT_COOLDOWN_S * 1000;
+    if (m.state === 'PARKED_USER_AWAY' && rs >= cfg.RETURN_MIN_CONFIDENCE && !cooling) {
       const ri = this.returnInfo(c.now);
+      // arrivo stimato troppo lontano (o sconosciuto da lontano): non è un ritorno imminente
+      const eta = ri ? (ri.etaS ?? Math.round(ri.distanceM / cfg.RETURN_WALK_SPEED_MS)) : null;
+      if (eta === null || eta > cfg.RETURN_MAX_ETA_S) return;
       this.transition(
         'RETURN_PREDICTED',
         `si sta avvicinando all'auto: ${ri ? ri.distanceM : '?'} m, ETA ${ri && ri.etaS !== null ? fmtDur(ri.etaS * 1000) : 'n/d'}, score ${rs}`,
@@ -1398,6 +1422,7 @@ export class DetectionEngine {
     if (m.state === 'RETURN_PREDICTED') {
       const series = m.returnSeries.filter((x) => (c.now - x.t) / 1000 <= cfg.RETURN_CANCEL_S);
       if (series.length >= 2 && series[series.length - 1].d - Math.min(...series.map((x) => x.d)) > 20) {
+        m.returnCancelT = c.now;
         this.transition('PARKED_USER_AWAY', 'previsione di ritorno annullata: si sta di nuovo allontanando', c.now);
       }
     }
