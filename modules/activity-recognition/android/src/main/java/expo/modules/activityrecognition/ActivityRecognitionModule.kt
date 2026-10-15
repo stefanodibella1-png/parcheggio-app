@@ -10,7 +10,6 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -60,6 +59,25 @@ class ActivityRecognitionModule : Module() {
 
     Function("stop") {
       stop()
+    }
+
+    // riavvio del riconoscimento attività tutto nativo (niente timer JS): rimozione, poi nuova richiesta
+    Function("restartActivity") { why: String ->
+      ActivityControl.restart(context, why)
+    }
+
+    // stato del nativo per l'export: GPS del servizio, attività, JS tenuto sveglio
+    Function("nativeStatus") {
+      mapOf(
+        "serviceRunning" to LocationService.running,
+        "serviceLastFixT" to LocationService.lastFixT.toDouble(),
+        "serviceFixCount" to LocationService.svcFixCount.toDouble(),
+        "activityWanted" to ActivityControl.wanted(context),
+        "activityLastSampleT" to ActivityControl.lastSampleT.toDouble(),
+        "activityLastRequestT" to ActivityControl.lastRequestT.toDouble(),
+        "activityLastRestartT" to ActivityControl.lastRestartT.toDouble(),
+        "keepAliveRunning" to KeepAliveTaskService.running
+      )
     }
 
     // Lo storico delle attività non è disponibile su Android.
@@ -127,26 +145,15 @@ class ActivityRecognitionModule : Module() {
       PackageManager.PERMISSION_GRANTED
   }
 
-  private fun pendingIntent(): PendingIntent {
-    val intent = Intent(context, ActivityReceiver::class.java).setAction(ACTION)
-    // FLAG_MUTABLE: Play Services deve poter aggiungere il risultato all'intent
-    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-    return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
-  }
-
-  @SuppressLint("MissingPermission")
+  // richiesta e rimozione passano da ActivityControl (stessa PendingIntent): la richiesta nuova
+  // sostituisce la vecchia, senza la rimozione prima che poteva arrivare dopo e spegnere tutto
   private fun start(intervalMs: Long) {
-    if (!hasPermission()) return
-    if (running) stop()
-    ActivityRecognition.getClient(context).requestActivityUpdates(intervalMs, pendingIntent())
+    ActivityControl.start(context, intervalMs)
     running = true
   }
 
-  @SuppressLint("MissingPermission")
   private fun stop() {
-    if (!hasPermission()) return
-    ActivityRecognition.getClient(context).removeActivityUpdates(pendingIntent())
+    ActivityControl.stop(context)
     running = false
   }
 
@@ -179,7 +186,5 @@ class ActivityRecognitionModule : Module() {
   companion object {
     private const val LOC_ACTION = "expo.modules.activityrecognition.LOCATION_UPDATE"
     private const val LOC_REQUEST_CODE = 4712
-    private const val ACTION = "expo.modules.activityrecognition.ACTIVITY_UPDATE"
-    private const val REQUEST_CODE = 4711
   }
 }

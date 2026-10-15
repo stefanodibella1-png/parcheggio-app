@@ -10,9 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -31,6 +33,30 @@ class LocationService : Service() {
   private var callback: LocationCallback? = null
   private var intervalMs: Long = 2000
   private var started = false
+  private var client: FusedLocationProviderClient? = null
+  private val handler = Handler(Looper.getMainLooper())
+  private var startT = 0L
+  private var lastRequestT = 0L
+  /** 0 = GPS regolare; 1 = richiesta rifatta; 2 = client ricreato (guardiano "vivo ma muto") */
+  private var muteStage = 0
+  private var muteStageT = 0L
+  private var lastActCheckT = 0L
+
+  /**
+   * Guardiano interno, ogni 30 s, non dipende dal riconoscimento attività né da JS.
+   * Test 15/10: servizio "vivo" ma nessuna posizione dalle 17:40 alle 17:58 (chiuso Google Maps).
+   */
+  private val watchdog = object : Runnable {
+    override fun run() {
+      try {
+        checkMute()
+        checkActivity()
+      } catch (e: Exception) {
+        ServiceLog.add(this@LocationService, "guardiano", "errore: ${e.javaClass.simpleName}")
+      }
+      handler.postDelayed(this, WATCHDOG_MS)
+    }
+  }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,6 +96,15 @@ class LocationService : Service() {
     instance = this
     started = true
     if (fresh) {
+      startT = System.currentTimeMillis()
+      handler.removeCallbacks(watchdog)
+      handler.postDelayed(watchdog, WATCHDOG_MS)
+      // riconoscimento attività: se un test lo vuole, si assicura la richiesta (anche dopo un riavvio del processo)
+      if (ActivityControl.wanted(this)) ActivityControl.start(this, ACTIVITY_INTERVAL_MS)
+    }
+    // JS sveglio finché il GPS è acceso (con Maps in primo piano o schermo spento)
+    KeepAliveTaskService.start(this, if (fresh) "avvio servizio" else "servizio già attivo")
+    if (fresh) {
       val source = intent?.getStringExtra(EXTRA_SOURCE) ?: if (intent == null) "sistema (riavvio automatico)" else "app"
       ServiceLog.add(this, "avviato", "da $source, intervallo ${interval} ms")
     }
@@ -79,9 +114,10 @@ class LocationService : Service() {
 
   @SuppressLint("MissingPermission")
   fun request(interval: Long) {
-    val client = LocationServices.getFusedLocationProviderClient(this)
+    val client = this.client ?: LocationServices.getFusedLocationProviderClient(this).also { this.client = it }
     callback?.let { client.removeLocationUpdates(it) }
     intervalMs = interval
+    lastRequestT = System.currentTimeMillis()
     val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
       .setMinUpdateIntervalMillis(interval / 2)
       .setMinUpdateDistanceMeters(0f)
@@ -90,8 +126,17 @@ class LocationService : Service() {
       .build()
     val cb = object : LocationCallback() {
       override fun onLocationResult(result: LocationResult) {
-        lastFixT = System.currentTimeMillis()
-        for (l in result.locations) LocationBus.emit(LocationReceiver.toMap(l))
+        val now = System.currentTimeMillis()
+        if (muteStage > 0) {
+          ServiceLog.add(this@LocationService, "guardiano", "GPS tornato dopo ${if (lastFixT > 0) (now - lastFixT) / 1000 else -1} s")
+          muteStage = 0
+        }
+        lastFixT = now
+        for (l in result.locations) {
+          lastSpeedMs = if (l.hasSpeed()) l.speed.toDouble() else lastSpeedMs
+          LocationBus.emit(LocationReceiver.toMap(l, "svc"))
+          svcFixCount++
+        }
         // segno di vita (al massimo una volta al minuto): serve a datare una morte senza avviso
         if (lastFixT - lastAliveWrite > 60_000) {
           lastAliveWrite = lastFixT
@@ -113,6 +158,48 @@ class LocationService : Service() {
     request(intervalMs)
   }
 
+  /**
+   * "Vivo ma muto": nessuna posizione DEL SERVIZIO da 2 minuti con l'ultima velocità da veicolo,
+   * oppure da 5 minuti in qualsiasi caso → si rifà la richiesta; se dopo 1 minuto tace ancora,
+   * si ricrea il client di posizione. Ogni intervento finisce nel registro.
+   */
+  private fun checkMute() {
+    val now = System.currentTimeMillis()
+    val ref = if (lastFixT > 0) lastFixT else startT
+    val silent = now - ref
+    if (silent < MUTE_VEHICLE_MS) return
+    val vehicle = lastSpeedMs >= MUTE_VEHICLE_SPEED_MS
+    if (muteStage == 0) {
+      if (!vehicle && silent < MUTE_ANY_MS) return
+      muteStage = 1
+      muteStageT = now
+      ServiceLog.add(this, "guardiano", "GPS muto da ${silent / 1000} s (ultima velocità ${"%.0f".format(lastSpeedMs * 3.6)} km/h): richiesta rifatta")
+      request(intervalMs)
+    } else if (muteStage == 1 && now - muteStageT >= MUTE_RECREATE_MS) {
+      muteStage = 2
+      muteStageT = now
+      ServiceLog.add(this, "guardiano", "GPS ancora muto da ${silent / 1000} s: client di posizione ricreato")
+      callback?.let { cb -> client?.removeLocationUpdates(cb) }
+      callback = null
+      client = LocationServices.getFusedLocationProviderClient(applicationContext)
+      request(intervalMs)
+    } else if (muteStage == 2 && now - muteStageT >= MUTE_RETRY_MS) {
+      // ancora niente: si ricomincia il ciclo (richiesta, poi client nuovo)
+      muteStage = 0
+    }
+  }
+
+  /** Riconoscimento attività: nessun campione da 10 minuti → riavvio nativo (al massimo ogni 10 minuti). */
+  private fun checkActivity() {
+    val now = System.currentTimeMillis()
+    if (now - lastActCheckT < ACTIVITY_CHECK_MS) return
+    lastActCheckT = now
+    if (!ActivityControl.wanted(this)) return
+    val last = maxOf(ActivityControl.lastSampleT, ActivityControl.lastRequestT, startT)
+    if (now - last < ACTIVITY_SILENT_MS || now - ActivityControl.lastRestartT < ACTIVITY_SILENT_MS) return
+    ActivityControl.restart(this, "nessun campione da ${(now - ActivityControl.lastSampleT.coerceAtLeast(startT)) / 60000} min")
+  }
+
   override fun onTaskRemoved(rootIntent: Intent?) {
     ServiceLog.add(this, "app tolta dai recenti", "")
     super.onTaskRemoved(rootIntent)
@@ -125,8 +212,10 @@ class LocationService : Service() {
       ServiceLog.add(this, "fermato", if (wanted) "chiuso dal sistema durante un test" else "fermato dall'app")
       prefs.edit().putBoolean(KEY_ALIVE, false).apply()
     }
-    callback?.let { LocationServices.getFusedLocationProviderClient(this).removeLocationUpdates(it) }
+    handler.removeCallbacks(watchdog)
+    callback?.let { (client ?: LocationServices.getFusedLocationProviderClient(this)).removeLocationUpdates(it) }
     callback = null
+    if (!wanted) KeepAliveTaskService.stop(this)
     running = false
     if (instance === this) instance = null
     super.onDestroy()
@@ -169,9 +258,21 @@ class LocationService : Service() {
     const val PREFS = "parking_location_service"
     const val CHANNEL = "parking-tracking"
     const val NOTIFICATION_ID = 47110
+    const val ACTIVITY_INTERVAL_MS = 3000L
+    // guardiano "vivo ma muto" (soglie del servizio nativo, non del motore)
+    private const val WATCHDOG_MS = 30_000L
+    private const val MUTE_VEHICLE_MS = 120_000L
+    private const val MUTE_ANY_MS = 300_000L
+    private const val MUTE_VEHICLE_SPEED_MS = 4.2 // 15 km/h
+    private const val MUTE_RECREATE_MS = 60_000L
+    private const val MUTE_RETRY_MS = 180_000L
+    private const val ACTIVITY_CHECK_MS = 60_000L
+    private const val ACTIVITY_SILENT_MS = 600_000L
 
     @Volatile var running = false
     @Volatile var lastFixT = 0L
+    @Volatile var lastSpeedMs = 0.0
+    @Volatile var svcFixCount = 0L
     @Volatile private var lastAliveWrite = 0L
     @Volatile var instance: LocationService? = null
 

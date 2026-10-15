@@ -10,12 +10,14 @@ class LocationReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     if (!LocationResult.hasResult(intent)) return
     val result = LocationResult.extractResult(intent) ?: return
-    for (l in result.locations) LocationBus.emit(toMap(l))
+    for (l in result.locations) LocationBus.emit(toMap(l, "pi"))
   }
 
   companion object {
-    fun toMap(l: android.location.Location): Map<String, Any> {
+    /** src: "svc" = servizio GPS nativo, "pi" = riserva via PendingIntent */
+    fun toMap(l: android.location.Location, src: String): Map<String, Any> {
       val m = HashMap<String, Any>()
+      m["src"] = src
       m["t"] = l.time.toDouble()
       m["latitude"] = l.latitude
       m["longitude"] = l.longitude

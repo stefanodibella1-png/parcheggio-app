@@ -27,6 +27,12 @@ export function startActivity(onSample: (s: ActivitySample) => void): void {
  * prima la rimozione, poi (dopo che è stata eseguita) una nuova richiesta.
  */
 export async function kickActivity(): Promise<void> {
+  // build 23+: riavvio tutto nativo, senza timer JS. Prima (togli → 8 s di timer JS → rimetti)
+  // se l'app andava in background a metà, la richiesta restava tolta (test 15/10: 2 campioni in 7 ore).
+  if (ActivityRecognition.restartActivity('nessuna attività da JS')) {
+    nativeStarted = true;
+    return;
+  }
   ActivityRecognition.stop();
   // Play Services: una nuova richiesta subito dopo la rimozione può restare spenta; si aspetta di più
   await new Promise((r) => setTimeout(r, 8000));

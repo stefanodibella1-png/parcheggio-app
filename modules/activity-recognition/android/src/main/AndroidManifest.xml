@@ -31,5 +31,9 @@
     <service
       android:name="expo.modules.activityrecognition.BootTaskService"
       android:exported="false" />
+    <!-- tiene sveglio JS mentre il GPS è acceso (task headless senza scadenza) -->
+    <service
+      android:name="expo.modules.activityrecognition.KeepAliveTaskService"
+      android:exported="false" />
   </application>
 </manifest>

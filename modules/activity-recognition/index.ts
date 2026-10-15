@@ -32,6 +32,20 @@ type NativeModuleShape = {
   setLocationInterval?(intervalMs: number): boolean;
   locationServiceRunning?(): boolean;
   getServiceLog?(): Promise<ServiceLogEntry[]>;
+  restartActivity?(why: string): void;
+  nativeStatus?(): NativeStatus;
+};
+
+/** Android: stato del nativo al momento dell'export (tempi in ms, 0 = mai). */
+export type NativeStatus = {
+  serviceRunning: boolean;
+  serviceLastFixT: number;
+  serviceFixCount: number;
+  activityWanted: boolean;
+  activityLastSampleT: number;
+  activityLastRequestT: number;
+  activityLastRestartT: number;
+  keepAliveRunning: boolean;
 };
 
 /** Android: avvii, morti e riavvii del servizio GPS (registro nativo su file). */
@@ -45,6 +59,7 @@ export type NativeLocation = {
   speed: number; // -1 = sconosciuta
   heading: number; // -1 = sconosciuta
   altitude: number; // -99999 = sconosciuta
+  src?: 'svc' | 'pi'; // svc = servizio GPS nativo, pi = riserva via PendingIntent (build 23+)
 };
 
 const Native = requireOptionalNativeModule<NativeModuleShape>('ActivityRecognition');
@@ -96,6 +111,15 @@ export const ActivityRecognition = {
   },
   async getBufferedLocations(): Promise<NativeLocation[]> {
     return typeof Native?.getBufferedLocations === 'function' ? Native.getBufferedLocations() : [];
+  },
+  /** Android: riavvio del riconoscimento attività tutto nativo. false se il modulo è vecchio. */
+  restartActivity(why: string): boolean {
+    if (typeof Native?.restartActivity !== 'function') return false;
+    Native.restartActivity(why);
+    return true;
+  },
+  nativeStatus(): NativeStatus | null {
+    return typeof Native?.nativeStatus === 'function' ? Native.nativeStatus() : null;
   },
   async getServiceLog(): Promise<ServiceLogEntry[]> {
     return typeof Native?.getServiceLog === 'function' ? Native.getServiceLog() : [];

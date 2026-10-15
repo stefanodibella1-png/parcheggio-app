@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "backgroundColor": "#0E1116",
-    "runtimeVersion": "4",
+    "runtimeVersion": "5",
     "updates": {
       "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0,

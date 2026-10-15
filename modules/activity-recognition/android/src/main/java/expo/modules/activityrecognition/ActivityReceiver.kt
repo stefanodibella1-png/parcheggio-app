@@ -16,6 +16,7 @@ class ActivityReceiver : BroadcastReceiver() {
     if (!ActivityRecognitionResult.hasResult(intent)) return
     val result = ActivityRecognitionResult.extractResult(intent) ?: return
     val a = result.mostProbableActivity
+    ActivityControl.lastSampleT = System.currentTimeMillis()
     // guardiano nativo (anche con JS congelato): in auto e
     // - servizio GPS morto → si riavvia (14/10: GPS muto 2 ore con IN_VEHICLE per 22 minuti);
     // - servizio vivo ma GPS muto da 2 minuti → si rifà la richiesta.

@@ -97,6 +97,8 @@ export async function buildExport(testId: string) {
     (x) => x.t >= test.startedAt && x.t <= exportedAt,
   );
   const { alertsReceived, listenLog, alertsSent } = await receivedAlerts(test.startedAt, exportedAt);
+  // build 23+: GPS del servizio, riconoscimento attività e veglia di JS al momento dell'export
+  const nativeStatus = ActivityRecognition.nativeStatus();
   const json = {
     schemaVersion: SCHEMA_VERSION,
     app: 'PARCHEGGIO',
@@ -124,6 +126,7 @@ export async function buildExport(testId: string) {
     reviewLabels: labels,
     qualityWarnings: quality,
     serviceLog,
+    nativeStatus,
     alertsSent,
     alertsReceived,
     listenLog,

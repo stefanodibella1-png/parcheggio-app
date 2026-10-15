@@ -50,7 +50,8 @@ function toSample(l: NativeLocation): LocationSample {
     speed,
     altitude: l.altitude <= -99999 ? null : l.altitude,
     heading: l.heading < 0 || speed === null || speed < 1 ? null : l.heading,
-    source: 'fused-pi',
+    // build 23+: origine vera (svc = servizio GPS nativo, pi = riserva); prima tutto era 'fused-pi'
+    source: l.src === 'svc' ? 'svc' : 'fused-pi',
   };
 }
 

@@ -448,6 +448,13 @@ class Host {
     if (IS_PUBLIC && (await db.kvGet('pc:onboarded').catch(() => null)) === '1') await this.startTest(['public']);
   }
 
+  /** Task di veglia (index.ts): resta in attesa finché il test è attivo, poi termina. */
+  async whileActive(): Promise<void> {
+    while (this.state.active) {
+      await new Promise((r) => setTimeout(r, 60_000));
+    }
+  }
+
   /** Da chiamare quando l'utente chiude il riepilogo: applica eventuali aggiornamenti. */
   async afterSummary(): Promise<void> {
     if (!this.state.active) await applyPendingUpdate();

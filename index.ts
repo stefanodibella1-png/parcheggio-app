@@ -13,4 +13,12 @@ AppRegistry.registerHeadlessTask('ParkingBoot', () => async () => {
   await host.startOnBoot();
 });
 
+// Android (build 23+): task di veglia avviato dal servizio GPS nativo. Finché è in corso,
+// React Native non sospende i timer JS (con Google Maps in primo piano o a schermo spento)
+// e il motore continua a girare. Se il processo era morto, ricrea anche il motore.
+AppRegistry.registerHeadlessTask('ParkingKeepAlive', () => async () => {
+  await host.startOnBoot();
+  await host.whileActive();
+});
+
 registerRootComponent(App);
