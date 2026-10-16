@@ -31,6 +31,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | A | Installare la **build 22** (runtime 4, pronta il 14/10 22:56) su telefono e tablet; batteria "Nessuna restrizione" + avvio automatico | Appena la build è pronta |
 | A2 | ✓ 15/10: prova GPS giorno 1 **bocciata** (activity morta, JS addormentato con Maps, GPS muto 17:40–17:58, punto auto sbagliato di 60 m). **Build 23** (runtime 5) con veglia JS, activity nativa, guardiano «vivo ma muto». Da installare su telefono e tablet; la prova di 3 giorni riparte da qui | 15/10 sera |
 | A3 | Prova fissa: 10 min di guida **senza Maps** e 10 min **con Maps aperto** → posizioni `svc`, activity presenti, eventi in tempo reale | Primo giorno con la build 23 |
+| A4 | ✓ 16/10 mattina (build 23 + motore 7): guida fino a Etnapolis e parcheggio OK — GPS tutto dal servizio, nessun buco, motore sveglio, punto ±5 m, nessun avviso falso. Activity ancora a zero → **build 24** (runtime 6): transizioni Play Services come seconda strada + diagnostica broadcast | da installare 16/10 |
 | B | Inviare gli export dei 3 giorni di prova GPS (telefono + tablet) | Dopo 3 giorni dall'installazione |
 | C | Prova cattiva: chiudere PARCHEGGIO dalle recenti mentre guida | Durante i 3 giorni, una volta |
 | D | ✓ 14/10: PARCHEGGIO ruolo **CERCA** (schermata Test, interruttore; ascolto continuo, voce da fermo, «In ascolto ✓ · ultimo controllo N s fa» e ultimo avviso in grande) | fatto (aggiornamento JS) |
