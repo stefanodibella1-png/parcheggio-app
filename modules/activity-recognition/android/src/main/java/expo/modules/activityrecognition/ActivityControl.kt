@@ -9,6 +9,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.ActivityRecognition
+import com.google.android.gms.location.ActivityTransition
+import com.google.android.gms.location.ActivityTransitionRequest
+import com.google.android.gms.location.DetectedActivity
 
 /**
  * Richiesta del riconoscimento attività gestita interamente dal nativo.
@@ -20,6 +23,10 @@ import com.google.android.gms.location.ActivityRecognition
 object ActivityControl {
   private const val ACTION = "expo.modules.activityrecognition.ACTIVITY_UPDATE"
   private const val REQUEST_CODE = 4711
+  // seconda strada (16/10: nessun campione dagli aggiornamenti periodici dal 15/10 alle 13:06):
+  // le transizioni (salito in auto, sceso a piedi, fermo) usano un'altra API di Play Services
+  const val TRANSITION_ACTION = "expo.modules.activityrecognition.ACTIVITY_TRANSITION"
+  private const val TRANSITION_REQUEST_CODE = 4713
   private const val PREFS = "parking_activity"
   private const val KEY_WANTED = "wanted"
   private const val KEY_INTERVAL = "interval"
@@ -27,6 +34,12 @@ object ActivityControl {
   @Volatile var lastSampleT = 0L
   @Volatile var lastRequestT = 0L
   @Volatile var lastRestartT = 0L
+  // diagnostica: quanti broadcast arrivano davvero al ricevitore
+  @Volatile var receiveCount = 0L
+  @Volatile var noResultCount = 0L
+  @Volatile var transitionCount = 0L
+  @Volatile var lastReceiveT = 0L
+  @Volatile var firstAfterRequestLogged = true
 
   fun hasPermission(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
@@ -42,6 +55,36 @@ object ActivityControl {
     return PendingIntent.getBroadcast(context.applicationContext, REQUEST_CODE, intent, flags)
   }
 
+  private fun transitionIntent(context: Context): PendingIntent {
+    val intent = Intent(context, ActivityReceiver::class.java).setAction(TRANSITION_ACTION)
+    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+    return PendingIntent.getBroadcast(context.applicationContext, TRANSITION_REQUEST_CODE, intent, flags)
+  }
+
+  private fun transitionRequest(): ActivityTransitionRequest {
+    val types = intArrayOf(
+      DetectedActivity.IN_VEHICLE, DetectedActivity.WALKING, DetectedActivity.ON_FOOT,
+      DetectedActivity.STILL, DetectedActivity.RUNNING, DetectedActivity.ON_BICYCLE
+    )
+    val list = ArrayList<ActivityTransition>()
+    for (t in types) {
+      list.add(ActivityTransition.Builder().setActivityType(t).setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER).build())
+    }
+    return ActivityTransitionRequest(list)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun requestTransitions(context: Context) {
+    try {
+      ActivityRecognition.getClient(context.applicationContext)
+        .requestActivityTransitionUpdates(transitionRequest(), transitionIntent(context))
+        .addOnFailureListener { e -> ServiceLog.add(context, "activity", "transizioni: richiesta fallita: ${e.message ?: e.javaClass.simpleName}") }
+    } catch (e: Exception) {
+      ServiceLog.add(context, "activity", "transizioni non possibili: ${e.message ?: e.javaClass.simpleName}")
+    }
+  }
+
   fun wanted(context: Context): Boolean =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_WANTED, false)
 
@@ -53,8 +96,13 @@ object ActivityControl {
   fun start(context: Context, intervalMs: Long) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
       .putBoolean(KEY_WANTED, true).putLong(KEY_INTERVAL, intervalMs).apply()
-    if (!hasPermission(context)) return
+    if (!hasPermission(context)) {
+      ServiceLog.add(context, "activity", "permesso Attività fisica mancante: nessuna richiesta")
+      return
+    }
     lastRequestT = System.currentTimeMillis()
+    firstAfterRequestLogged = false
+    requestTransitions(context)
     try {
       ActivityRecognition.getClient(context.applicationContext)
         .requestActivityUpdates(intervalMs, pendingIntent(context))
@@ -70,6 +118,7 @@ object ActivityControl {
     if (!hasPermission(context)) return
     try {
       ActivityRecognition.getClient(context.applicationContext).removeActivityUpdates(pendingIntent(context))
+      ActivityRecognition.getClient(context.applicationContext).removeActivityTransitionUpdates(transitionIntent(context))
     } catch (e: Exception) {
       // niente da togliere
     }
@@ -84,7 +133,9 @@ object ActivityControl {
     val ctx = context.applicationContext
     val client = ActivityRecognition.getClient(ctx)
     val pi = pendingIntent(ctx)
-    ServiceLog.add(ctx, "activity", "riavvio: $why")
+    ServiceLog.add(ctx, "activity", "riavvio: $why (broadcast ricevuti finora $receiveCount, senza risultato $noResultCount, transizioni $transitionCount)")
+    firstAfterRequestLogged = false
+    requestTransitions(ctx)
     try {
       client.removeActivityUpdates(pi).addOnCompleteListener {
         lastRequestT = System.currentTimeMillis()

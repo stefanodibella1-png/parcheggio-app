@@ -45,6 +45,10 @@ export type NativeStatus = {
   activityLastSampleT: number;
   activityLastRequestT: number;
   activityLastRestartT: number;
+  activityReceiveCount?: number;
+  activityNoResultCount?: number;
+  activityTransitionCount?: number;
+  activityLastReceiveT?: number;
   keepAliveRunning: boolean;
 };
 

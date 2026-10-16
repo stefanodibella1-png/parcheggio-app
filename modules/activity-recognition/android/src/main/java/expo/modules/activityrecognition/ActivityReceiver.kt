@@ -3,7 +3,9 @@ package expo.modules.activityrecognition
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import com.google.android.gms.location.ActivityRecognitionResult
+import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
 
 /**
@@ -13,10 +15,43 @@ import com.google.android.gms.location.DetectedActivity
  */
 class ActivityReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
-    if (!ActivityRecognitionResult.hasResult(intent)) return
+    val now0 = System.currentTimeMillis()
+    ActivityControl.receiveCount++
+    ActivityControl.lastReceiveT = now0
+    // transizioni (seconda strada): salito in auto, a piedi, fermo
+    if (ActivityTransitionResult.hasResult(intent)) {
+      val tr = ActivityTransitionResult.extractResult(intent) ?: return
+      for (ev in tr.transitionEvents) {
+        ActivityControl.transitionCount++
+        ActivityControl.lastSampleT = now0
+        val t = now0 - (SystemClock.elapsedRealtimeNanos() - ev.elapsedRealTimeNanos) / 1_000_000
+        if (!ActivityControl.firstAfterRequestLogged) {
+          ActivityControl.firstAfterRequestLogged = true
+          ServiceLog.add(context, "activity", "primo dato dopo la richiesta: transizione ${map(ev.activityType)}")
+        }
+        ActivityBus.emit(
+          mapOf(
+            "t" to t.toDouble(),
+            "activity" to map(ev.activityType),
+            "confidence" to 100,
+            "platform" to "android",
+            "source" to "gms-transition"
+          )
+        )
+      }
+      return
+    }
+    if (!ActivityRecognitionResult.hasResult(intent)) {
+      ActivityControl.noResultCount++
+      return
+    }
     val result = ActivityRecognitionResult.extractResult(intent) ?: return
     val a = result.mostProbableActivity
     ActivityControl.lastSampleT = System.currentTimeMillis()
+    if (!ActivityControl.firstAfterRequestLogged) {
+      ActivityControl.firstAfterRequestLogged = true
+      ServiceLog.add(context, "activity", "primo dato dopo la richiesta: ${map(a.type)} ${a.confidence}%")
+    }
     // guardiano nativo (anche con JS congelato): in auto e
     // - servizio GPS morto → si riavvia (14/10: GPS muto 2 ore con IN_VEHICLE per 22 minuti);
     // - servizio vivo ma GPS muto da 2 minuti → si rifà la richiesta.

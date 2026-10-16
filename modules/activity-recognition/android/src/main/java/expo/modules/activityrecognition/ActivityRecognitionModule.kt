@@ -76,6 +76,10 @@ class ActivityRecognitionModule : Module() {
         "activityLastSampleT" to ActivityControl.lastSampleT.toDouble(),
         "activityLastRequestT" to ActivityControl.lastRequestT.toDouble(),
         "activityLastRestartT" to ActivityControl.lastRestartT.toDouble(),
+        "activityReceiveCount" to ActivityControl.receiveCount.toDouble(),
+        "activityNoResultCount" to ActivityControl.noResultCount.toDouble(),
+        "activityTransitionCount" to ActivityControl.transitionCount.toDouble(),
+        "activityLastReceiveT" to ActivityControl.lastReceiveT.toDouble(),
         "keepAliveRunning" to KeepAliveTaskService.running
       )
     }
