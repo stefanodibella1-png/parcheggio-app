@@ -87,6 +87,8 @@ interface Memory {
   lastWalkActT: number | null;
   /** campioni activity IN_VEHICLE affidabili (istanti), ultimi 2 minuti */
   vehActT: number[];
+  /** ON_BICYCLE (monopattino, bici) */
+  bikeActT?: number[];
   /** tutte le posizioni anche imprecise (Wi-Fi/celle, fino a DRIFT_FIX_MAX_ACC_M), ultimi 5 minuti */
   coarse: LocationSample[];
   /** ultima volta che un movimento è partito vicino all'auto (DEPARTURE_CANDIDATE) */
@@ -189,7 +191,7 @@ export function qualityOf(accuracyM: number, cfg: DetectionConfig): PointQuality
  * Versione delle regole del motore. Va aumentata a ogni cambio di logica: i test in corso
  * vengono ricalcolati dall'inizio con le regole nuove invece di proseguire da uno stato vecchio.
  */
-export const ENGINE_LOGIC = 7;
+export const ENGINE_LOGIC = 8;
 
 export class DetectionEngine {
   readonly cfg: DetectionConfig;
@@ -217,6 +219,7 @@ export class DetectionEngine {
       lastActivityAny: null,
       lastWalkActT: null,
       vehActT: [],
+      bikeActT: [],
       coarse: [],
       nearDepartT: null,
       nearReturnT: null,
@@ -595,6 +598,11 @@ export class DetectionEngine {
     if (a.activity === 'IN_VEHICLE' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       this.m.vehActT.push(a.t);
       if (this.m.vehActT.length > 200) this.m.vehActT.shift();
+    }
+    if (a.activity === 'ON_BICYCLE' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
+      if (!this.m.bikeActT) this.m.bikeActT = [];
+      this.m.bikeActT.push(a.t);
+      if (this.m.bikeActT.length > 200) this.m.bikeActT.shift();
     }
     if (this.m.departure && a.activity === 'IN_VEHICLE' && a.confidence >= this.cfg.ACTIVITY_MIN_CONFIDENCE) {
       this.m.departure.sawVehicleActivity = true;
@@ -1004,6 +1012,12 @@ export class DetectionEngine {
 
   private openSession(now: number, reason: string, pointOverride: GeoPoint | null = null): void {
     const m = this.m;
+    // sosta dopo un giro in monopattino o in bici: non è un parcheggio dell'auto (17/10 ore 22:00, via Mazza)
+    if (this.micromobility(now, this.cfg.MICRO_TRIP_WINDOW_S) === 'micro') {
+      m.stopPhase = null;
+      this.transition('UNKNOWN', 'sosta dopo un giro in monopattino o in bici: non è un parcheggio dell\'auto', now);
+      return;
+    }
     const ph = m.stopPhase;
     const fixes = ph ? ph.fixes : [];
     const point = pointOverride ?? stabilizedPoint(fixes.length > 0 ? fixes : m.fixes.slice(-5));
@@ -1200,6 +1214,7 @@ export class DetectionEngine {
       }
       if (m.state === 'USER_RETURNING' && d > cfg.RETURN_RADIUS + 20) {
         m.returnSeries = [];
+        m.returnCancelT = c.now;
         this.transition('PARKED_USER_AWAY', `di nuovo lontano dall'auto (${d} m)`, c.now);
         return;
       }
@@ -1208,6 +1223,7 @@ export class DetectionEngine {
     if (this.farFromCar(c, d)) {
       m.returnSeries = [];
       m.farSince = null;
+      if (m.state === 'USER_RETURNING') m.returnCancelT = c.now; // ritorno smentito: pausa prima del prossimo
       this.transition('PARKED_USER_AWAY', `a ${d} m dall'auto da ${this.cfg.AWAY_STILL_S} s senza veicolo: sei sceso, il parcheggio resta occupato`, c.now);
       return;
     }
@@ -1331,6 +1347,8 @@ export class DetectionEngine {
     const d = this.distanceFromSpot(c.now);
 
     if (c.vehicleConfirmed && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) {
+      // in giro in monopattino o in bici lontano dall'auto: non è una partenza dell'auto
+      if (this.micromobility(c.now, cfg.MICRO_WINDOW_S) === 'micro') return;
       const start = m.motionStartFix;
       let startD = start && m.session ? distanceM(m.session.spot.pointFinal, start) : null;
       const radius = m.session?.gpsLostAtPark ? cfg.NO_GPS_DEPARTURE_RADIUS : cfg.DEPARTURE_START_RADIUS;
@@ -1369,8 +1387,10 @@ export class DetectionEngine {
     }
     if (!c.vehicleConfirmed && c.kmh !== null && c.kmh <= cfg.WALKING_SPEED_MAX) m.awayVehicleLogged = false;
 
+    // dopo un ritorno smentito, niente nuovo "si libera" per un po' (18/10 ore 13:20: avanti e indietro ogni 30 s)
+    const returnCooling = m.returnCancelT != null && c.now - m.returnCancelT < cfg.RETURN_REPREDICT_COOLDOWN_S * 1000;
     // Sei in auto vicino al posto (il sistema dice IN_VEHICLE) ma non ti stai ancora muovendo: si libera a breve
-    if (d !== null && d > cfg.RETURN_RADIUS && (c.kmh === null || c.kmh <= cfg.WALKING_SPEED_MAX) && this.inCarNearSpot(c, d)) {
+    if (!returnCooling && d !== null && d > cfg.RETURN_RADIUS && (c.kmh === null || c.kmh <= cfg.WALKING_SPEED_MAX) && this.inCarNearSpot(c, d)) {
       m.arrivedInVehicle = false;
       m.nearReturnT = c.now;
       this.transition('USER_RETURNING', `in auto a ${d} m dal posto: partenza probabile a breve`, c.now);
@@ -1378,7 +1398,7 @@ export class DetectionEngine {
     }
     // Ritorno anche con il punto dell'auto impreciso: ti sei avvicinato a piedi e ti sei fermato
     // vicino (sei salito in auto). Prima serviva arrivare entro 20 m dal punto salvato.
-    if (d !== null && d > cfg.RETURN_RADIUS && d <= cfg.RETURN_STOP_RADIUS_M && this.stoppedAfterApproach(c)) {
+    if (!returnCooling && d !== null && d > cfg.RETURN_RADIUS && d <= cfg.RETURN_STOP_RADIUS_M && this.stoppedAfterApproach(c)) {
       m.arrivedInVehicle = false;
       m.nearReturnT = c.now;
       this.transition('USER_RETURNING', `fermo a ${d} m dall'auto dopo essere tornato a piedi: probabilmente sei salito in auto`, c.now);
@@ -1434,6 +1454,15 @@ export class DetectionEngine {
     if (this.driftDeparture(c)) return;
     const since = m.departureCandidateSince ?? c.now;
     if (c.vehicleConfirmed && c.kmh !== null && c.kmh > cfg.WALKING_SPEED_MAX) {
+      const micro = this.micromobility(c.now, cfg.MICRO_WINDOW_S);
+      if (micro === 'micro') {
+        // parti in monopattino o in bici: l'auto resta dov'è
+        m.returnSeries = [];
+        m.awayVehicleLogged = true;
+        this.transition('PARKED_USER_AWAY', 'partito in monopattino o in bici (activity ON_BICYCLE, velocità bassa): l\'auto resta qui', c.now);
+        return;
+      }
+      if (micro === 'pending' && c.now - since < cfg.DEPARTURE_CANDIDATE_TIMEOUT_S * 1000) return; // si aspetta di capire
       this.startDeparture(c.now, m.motionStartFix, c.vScore);
       this.transition('VEHICLE_DEPARTED', `movimento compatibile con veicolo: score ${c.vScore}${this.fastNote(c.now)}`, c.now);
       this.evalDeparted(c);
@@ -1482,6 +1511,28 @@ export class DetectionEngine {
         this.transition('PARKED', `nessuna partenza confermata in ${cfg.DEPARTURE_CANDIDATE_TIMEOUT_S} s`, c.now);
       }
     }
+  }
+
+  /**
+   * Monopattino o bici (17/10 ore 21:56 e 23:32: spostamenti in monopattino presi per l'auto,
+   * un falso parcheggio in via Mazza e l'auto vera persa). Nella finestra: ON_BICYCLE almeno quanto
+   * IN_VEHICLE e mai oltre MICRO_MAX_KMH. 'pending' = segnali di bici ma non ancora decisivi.
+   */
+  private micromobility(now: number, windowS: number): 'micro' | 'pending' | 'no' {
+    const cfg = this.cfg;
+    const m = this.m;
+    const from = now - windowS * 1000;
+    const bike = (m.bikeActT ?? []).filter((t) => t >= from && t <= now).length;
+    if (bike === 0) return 'no';
+    const veh = m.vehActT.filter((t) => t >= from && t <= now).length;
+    let maxKmh = 0;
+    for (const f of m.fixes) {
+      if (f.t >= from && f.t <= now && f.speed !== null && f.accuracy <= cfg.GPS_ACCURACY_LIMIT) maxKmh = Math.max(maxKmh, f.speed * 3.6);
+    }
+    if (maxKmh > cfg.MICRO_MAX_KMH) return 'no';
+    if (bike >= cfg.MICRO_MIN_SAMPLES && bike >= veh) return 'micro';
+    if (veh >= cfg.MICRO_MIN_SAMPLES && veh >= bike * 2) return 'no';
+    return 'pending';
   }
 
   private startDeparture(now: number, startFix: LocationSample | null, vScore: number): void {

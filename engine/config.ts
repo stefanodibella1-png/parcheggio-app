@@ -147,6 +147,14 @@ export interface DetectionConfig {
   DRIVE_GAP_UNCERTAIN_S: number;
   /** il parcheggio è "dopo il buco" se apre entro questi secondi dal ritorno del GPS */
   DRIVE_GAP_RECENT_S: number;
+  /** monopattino / bici (17/10: spostamenti in monopattino presi per l'auto): velocità massima oltre la quale è un'auto */
+  MICRO_MAX_KMH: number;
+  /** finestra (s) per contare ON_BICYCLE contro IN_VEHICLE alla partenza */
+  MICRO_WINDOW_S: number;
+  /** finestra (s) del viaggio appena finito, prima di salvare un parcheggio */
+  MICRO_TRIP_WINDOW_S: number;
+  /** campioni ON_BICYCLE minimi per parlare di monopattino / bici */
+  MICRO_MIN_SAMPLES: number;
   RETURN_GEOFENCE_RADII: number[];
   /** finestra lunga per GPS rado (telefono in tasca, fix ogni 10-15 s) */
   RETURN_LONG_WINDOW_S: number;
@@ -320,6 +328,10 @@ export const DEFAULT_CONFIG: DetectionConfig = {
   RETURN_MAX_ETA_S: 300,
   DRIVE_GAP_UNCERTAIN_S: 120,
   DRIVE_GAP_RECENT_S: 600,
+  MICRO_MAX_KMH: 28,
+  MICRO_WINDOW_S: 180,
+  MICRO_TRIP_WINDOW_S: 300,
+  MICRO_MIN_SAMPLES: 3,
   RETURN_GEOFENCE_RADII: [500, 200, 50],
   RETURN_LONG_WINDOW_S: 180,
   RETURN_LONG_APPROACH_M: 80,
