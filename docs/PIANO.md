@@ -33,6 +33,7 @@ A ogni voce completata: spuntala con la data. A ogni nuova decisione: aggiungila
 | A3 | Prova fissa: 10 min di guida **senza Maps** e 10 min **con Maps aperto** → posizioni `svc`, activity presenti, eventi in tempo reale | Primo giorno con la build 23 |
 | A4 | ✓ 16/10 mattina (build 23 + motore 7): guida fino a Etnapolis e parcheggio OK — GPS tutto dal servizio, nessun buco, motore sveglio, punto ±5 m, nessun avviso falso. Activity ancora a zero → **build 24** (runtime 6): transizioni Play Services come seconda strada + diagnostica broadcast | da installare 16/10 |
 | A5 | ✓ 16/10 sera (build 24): **activity tornata** (412 campioni, IN_VEHICLE/STILL/WALKING + 3 transizioni), GPS solo servizio senza buchi, motore sveglio, sosta breve 17:37 non condivisa, parcheggio 17:49 OK, zero avvisi falsi. Test di soli 40 min: la prova di 3 giorni conta da qui | 16/10 |
+| A6 | ✓ 17–18/10 (build 24, 26 ore): GPS senza buchi, 11 morti del servizio tutte riavviate da sole, prova «tolta dai recenti» fatta (19:19, 00:15), activity ok. Errore trovato: **monopattino** preso per l'auto → **motore 8** (aggiornamento JS 18/10 23:56) | 18/10 |
 | B | Inviare gli export dei 3 giorni di prova GPS (telefono + tablet) | Dopo 3 giorni dall'installazione |
 | C | Prova cattiva: chiudere PARCHEGGIO dalle recenti mentre guida | Durante i 3 giorni, una volta |
 | D | ✓ 14/10: PARCHEGGIO ruolo **CERCA** (schermata Test, interruttore; ascolto continuo, voce da fermo, «In ascolto ✓ · ultimo controllo N s fa» e ultimo avviso in grande) | fatto (aggiornamento JS) |
