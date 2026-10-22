@@ -1,26 +1,21 @@
-# Cifra la chiave Firebase di questo repo con la chiave pubblica di SocialGlass (la privata è solo su Vercel)
-# e la consegna come artefatto temporaneo (1 giorno). SocialGlass la decifra e la imposta su Vercel.
-name: socialglass-collega
+# Pulizia: rimuove dal Firestore del parcheggio i dati di prova di SocialGlass (raccolte sg_*). Poi questo file va eliminato.
+name: socialglass-pulizia
 on:
-  workflow_dispatch:
   push:
     branches: [main]
     paths: [".github/workflows/socialglass-collega.yml"]
 jobs:
-  cifra:
+  pulisci:
     runs-on: ubuntu-latest
     env:
       SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-      PUB: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF1NVk5Rk1GRW1RRDRBNk02czcrTQpVUHJFektHTm1oYXY5OGJ0T1B3bjdrWm84TXFZU2xJVEc1eGNvbUlrVFFYNkpxT0xwWHlkMC9sVmwwUzRtSjlVCnFhZHlFTVJ0WURGVEE4WkN6cGxOZnFrNFJsWDhpcEVONjloajRhTjVlNVJPK05YQTFTVHp6cGZkVElxTWNmc2gKMFRSd0U5RTZnU0N4bTFGUHFBbTZuUUV1UjlGd3l6M3ZUOVFCT3M3Vkx0WmtQSno1VEtaVGNWQ3JlZlpjT1lqRwozeCs5bDJaSzVoMGRRRjlQQlFuUmcxM2hsRkxieUlVbVJUMUZPeEoxQ2thaGxDRlZrUkZURjhHdjEzTmlNQlNPCnNqSnRqT0xzRk5meXBkUzB3UjUxa3c0dURDWFZiQUhRd0MrYVA0dWRlZG9uWEo3NkVNUzdyRlIzZlRaUmlsdzIKdWdZTzFRcENaRlpXcTI2M1BWVCtPUVo2M2NVNktSTEFjanFodkFFYXVDNFF3ZnpyNlo2V2lVd3BWWUw3bk1QegpsZkt4aTJtRWNiVVFnWUMyMHljWFRMTzY1YTZqK1FJNU1hSVpKQXZrVGd5ZzJjdTZRV1IxWDhQdEtHQVNHU1RJCjExUW5hYU1yb3BrUWRGdW5hbERDdUhNU2QrUjQ1VUhyWkVtRWR5Y2NpUW10QWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
     steps:
-      - name: Cifra
-        run: |
-          set -e
-          [ -n "$SA" ] || { echo "::error::FIREBASE_SERVICE_ACCOUNT assente"; exit 1; }
-          mkdir out; echo "$PUB" | base64 -d > pub.pem
-          openssl rand -hex 32 | tr -d '\n' > k
-          printf '%s' "$SA" | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:k -out out/sa.enc
-          openssl pkeyutl -encrypt -pubin -inkey pub.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in k -out out/k.bin
-          rm -f k; echo "::notice title=SocialGlass::chiave cifrata pronta (run ${{ github.run_id }})"
-      - uses: actions/upload-artifact@v4
-        with: { name: sg-sa, path: out/, retention-days: 1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"; export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          P=$(node -p "JSON.parse(require('fs').readFileSync('$RUNNER_TEMP/sa.json','utf8')).project_id")
+          npm i -g firebase-tools@14 --no-audit --no-fund >/dev/null
+          for c in sg_caf sg_ottici_login sg_ottici sg_utenti sg_montature sg_meta; do firebase firestore:delete "$c" --recursive --force --project "$P" >/dev/null 2>&1 && echo "rimossa $c"; done
+          rm -f "$RUNNER_TEMP/sa.json"
+          echo "::notice title=Pulizia::dati SocialGlass rimossi da $P"
