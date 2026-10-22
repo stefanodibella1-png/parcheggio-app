@@ -1,0 +1,57 @@
+# Collega a SocialGlass (Vercel, progetto "socialglass") la chiave Firebase e la chiave Stripe di test di questo repo.
+name: socialglass-collega
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/socialglass-collega.yml"]
+jobs:
+  collega:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      SK: ${{ secrets.STRIPE_SECRET_KEY }}
+    steps:
+      - name: Diagnosi
+        run: |
+          T=$(printf '%s' "$VERCEL_TOKEN" | tr -d '[:space:]'); echo "::add-mask::$T"; echo "VERCEL_TOKEN=$T" >> $GITHUB_ENV
+          K=$(printf '%s' "$SK" | grep -oE '(sk|rk)_test_[A-Za-z0-9]+' | head -1 || true); echo "::add-mask::$K"; echo "SK=$K" >> $GITHUB_ENV
+          echo "::notice title=Segreti::Vercel ${#T} caratteri · Firebase $([ -n "$SA" ] && echo presente || echo assente) · Stripe test $([ -n "$K" ] && echo presente || echo assente)"
+          [ -n "$T" ] || { echo "::error title=Vercel::manca VERCEL_TOKEN in questo repo"; exit 1; }
+      - uses: actions/checkout@v4
+        with: { repository: stefanodibella1-png/ottivista, path: ov }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Variabili su Vercel e webhook Stripe
+        working-directory: ov/socialglass
+        run: |
+          set -e
+          npm i -g vercel@latest >/dev/null
+          vercel link --yes --project socialglass --token "$VERCEL_TOKEN" >/dev/null
+          PID=$(node -p "require('./.vercel/project.json').projectId"); TEAM=$(node -p "require('./.vercel/project.json').orgId")
+          Q="teamId=$TEAM"; case "$TEAM" in team_*) ;; *) Q="";; esac
+          setenv(){ K="$1" V="$2" node -e 'process.stdout.write(JSON.stringify({key:process.env.K,value:process.env.V,type:"encrypted",target:["production","preview"]}))' > "$RUNNER_TEMP/e.json"
+            curl -s -o /dev/null -w "$1 %{http_code}\n" -X POST -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" "https://api.vercel.com/v10/projects/$PID/env?upsert=true&$Q" --data-binary @"$RUNNER_TEMP/e.json"; rm -f "$RUNNER_TEMP/e.json"; }
+          URL=https://socialglass.vercel.app
+          if [ -n "$SA" ]; then setenv FIREBASE_SERVICE_ACCOUNT "$SA"; fi
+          if [ -n "$SK" ]; then
+            setenv STRIPE_SECRET_KEY "$SK"
+            HOOK="$URL/api/stripe-webhook"
+            for id in $(curl -s -u "$SK:" "https://api.stripe.com/v1/webhook_endpoints?limit=100" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s).data||[]) if(w.url==='$HOOK') console.log(w.id)})"); do
+              curl -s -o /dev/null -u "$SK:" -X DELETE "https://api.stripe.com/v1/webhook_endpoints/$id"; done
+            WH=$(curl -s -u "$SK:" https://api.stripe.com/v1/webhook_endpoints -d url="$HOOK" -d description="SocialGlass" \
+              -d "enabled_events[]=checkout.session.completed" -d "enabled_events[]=invoice.paid" -d "enabled_events[]=invoice.payment_failed" -d "enabled_events[]=customer.subscription.deleted" \
+              | node -p "JSON.parse(require('fs').readFileSync(0)).secret||''")
+            [ -n "$WH" ] && setenv STRIPE_WEBHOOK_SECRET "$WH" || echo "::warning title=Stripe::webhook non creato"
+          fi
+          vercel deploy --prod --yes --token "$VERCEL_TOKEN" >/dev/null
+          sleep 5; echo "::notice title=SocialGlass::$(curl -s $URL/api/health)"
+      - name: Database Firestore (crea se manca)
+        if: env.SA != ''
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"; export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          P=$(node -p "JSON.parse(require('fs').readFileSync('$RUNNER_TEMP/sa.json','utf8')).project_id")
+          npm i -g firebase-tools@14 --no-audit --no-fund >/dev/null
+          firebase firestore:databases:list --project "$P" --json 2>/dev/null | grep -q '(default)' && echo "::notice title=Firestore::database presente ($P)" || echo "::warning title=Firestore::database assente in $P"
+          curl -s https://socialglass.vercel.app/api/ottici | head -c 300; echo
